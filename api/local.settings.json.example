@@ -1,0 +1,34 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "WEBSITE_NODE_DEFAULT_VERSION": "~20",
+
+    "APP_NAME": "care-intelligence",
+
+    "_comment_owndb": "This app's own Cosmos (saved reports, chat sessions, insights, signals). Local = emulator.",
+    "COSMOS_ENDPOINT": "https://localhost:8081",
+    "COSMOS_DATABASE": "care-intelligence",
+    "COSMOS_CONTAINER_DEFAULT": "reports",
+    "COSMOS_KEY_LOCAL_ONLY": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+
+    "_comment_cap": "Read-ONLY core data from the cap app's Cosmos (CAPs/Risks/Audits/Locations). Locally, point at the same emulator + a seeded `capapp` db, or leave default and rely on the metrics sample fallback.",
+    "CAP_COSMOS_ENDPOINT": "https://localhost:8081",
+    "CAP_COSMOS_DATABASE": "capapp",
+
+    "_comment_c360": "Read-ONLY c360 client-360 data in Microsoft Fabric (core-prod-db). Auth uses your `az login` locally / the Function App MI in Azure. Queries only complete from a network with line-of-sight to the Fabric backend (your corp network or Azure) — see docs/C360_INTELLIGENCE_PLAN.md.",
+    "FABRIC_C360_SQL_ENDPOINT": "4trxo4y44m3e7byjyu2g7pz6le-xdpozjn34hau3cztgs66ay2wlm.datawarehouse.fabric.microsoft.com",
+    "FABRIC_C360_WAREHOUSE_NAME": "core-prod-db",
+
+    "_comment_aoai": "Leave AOAI_* unset to run all AI features in deterministic mock mode (no Azure OpenAI resource needed).",
+    "AOAI_ENDPOINT": "",
+    "AOAI_DEPLOYMENT": "",
+
+    "_comment_principal": "Local: base64-encoded SWA principal so requireAuth() passes. Decodes to { userId: 'local-dev', userDetails: 'dev@example.com', identityProvider: 'aad', userRoles: ['authenticated'] }.",
+    "MOCK_PRINCIPAL": "eyJ1c2VySWQiOiJsb2NhbC1kZXYiLCJ1c2VyRGV0YWlscyI6ImRldkBleGFtcGxlLmNvbSIsImlkZW50aXR5UHJvdmlkZXIiOiJhYWQiLCJ1c2VyUm9sZXMiOlsiYXV0aGVudGljYXRlZCJdfQ=="
+  },
+  "Host": {
+    "CORS": "*"
+  }
+}

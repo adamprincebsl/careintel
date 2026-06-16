@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+web/dist/
+
+# Local secrets
+.env
+api/local.settings.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Azure Functions
+api/bin/
+api/obj/
+
+# Logs
+*.log

@@ -1,0 +1,101 @@
+name: Azure CI/CD
+
+# BYO-Functions deployment model (matches beacon-capapp / beacon-dispatch):
+#
+#   build_and_deploy_swa  builds the Vite SPA in web/ (npm ci && npm run build →
+#                         web/dist), copies staticwebapp.config.json into dist/
+#                         so auth rules ship with the artifact, then uploads to
+#                         the Static Web App. api_location is '' because the API
+#                         lives in a SEPARATE, linked Function App.
+#
+#   deploy_functions      deploys api/ to the linked Function App via
+#                         Azure/functions-action, authed with OIDC.
+#
+#   close_pull_request    cleans up the SWA preview environment on PR close.
+#
+# Required GitHub repo secrets:
+#   AZURE_STATIC_WEB_APPS_API_TOKEN  — set by ./scripts/wire-github.sh
+#   AZURE_DEPLOY_CLIENT_ID           — set by ./scripts/setup-deploy-credentials.sh
+#   AZURE_TENANT_ID                  — set by ./scripts/setup-deploy-credentials.sh
+#   AZURE_SUBSCRIPTION_ID            — set by ./scripts/setup-deploy-credentials.sh
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  build_and_deploy_swa:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build & deploy SWA
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      - name: Build web (Vite)
+        working-directory: ./web
+        run: |
+          npm ci
+          npm run build
+      - name: Copy SWA config into the build artifact
+        run: cp staticwebapp.config.json web/dist/staticwebapp.config.json
+      - name: Deploy to SWA
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          app_location: 'web/dist'
+          api_location: ''
+          output_location: ''
+          skip_app_build: true
+
+  deploy_functions:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    name: Deploy Function App
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: api/package-lock.json
+      - name: Install api deps (production only)
+        working-directory: ./api
+        run: npm ci --omit=dev
+      - name: Login to Azure via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: func-beacon-care-intelligence
+          package: ./api
+
+  close_pull_request:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close pull request
+    steps:
+      - name: Close PR (clean up preview)
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: 'close'

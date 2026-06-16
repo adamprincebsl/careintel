@@ -1,0 +1,45 @@
+{
+  "_comment": "Hand-authored annotations merged onto the raw schema dump by scripts/load-c360-dictionary.mjs. Everything here is PHI-free METADATA (descriptions, classifications, relationships) — never client data. Keys under 'tables' are 'SCHEMA.TABLE' exactly as they appear in the dump. Column 'classification' is one of: PHI | quasi-identifier | safe | unclassified. Mark every identifier so the C2 aggregation step de-identifies correctly.",
+
+  "tables": {
+    "dbo.Client": {
+      "description": "Master client record — one row per enrolled individual.",
+      "grain": "one row per client",
+      "phi": "contains",
+      "columns": {
+        "ClientId": { "description": "Surrogate key", "classification": "quasi-identifier", "isIdentifier": true },
+        "FirstName": { "description": "Legal first name", "classification": "PHI", "isIdentifier": true },
+        "LastName": { "description": "Legal last name", "classification": "PHI", "isIdentifier": true },
+        "DateOfBirth": { "description": "DOB", "classification": "PHI", "isIdentifier": true },
+        "ProgramId": { "description": "FK → dbo.Program.ProgramId", "classification": "safe" },
+        "State": { "description": "2-letter state code", "classification": "safe" },
+        "AdmissionDate": { "description": "Enrollment date", "classification": "safe" },
+        "DischargeDate": { "description": "Null while active", "classification": "safe" }
+      }
+    },
+    "dbo.Program": {
+      "description": "Residential program / home.",
+      "grain": "one row per program",
+      "phi": "none",
+      "columns": {
+        "ProgramId": { "description": "Surrogate key", "classification": "safe" },
+        "ProgramName": { "description": "Display name", "classification": "safe" },
+        "Market": { "description": "Market grouping", "classification": "safe" },
+        "State": { "description": "2-letter state code", "classification": "safe" }
+      }
+    }
+  },
+
+  "joins": [
+    { "from": "dbo.Client.ProgramId", "to": "dbo.Program.ProgramId", "kind": "many-to-one", "note": "client lives in one program" }
+  ],
+
+  "glossary": [
+    { "term": "active census", "definition": "Count of clients with AdmissionDate set and DischargeDate null as of a date.", "relatedTables": ["dbo.Client"] },
+    { "term": "length of stay", "definition": "Days between AdmissionDate and DischargeDate (or today if active).", "relatedTables": ["dbo.Client"] }
+  ],
+
+  "metrics": [
+    { "name": "census_by_program", "definition": "Active client count grouped by program.", "sqlHint": "COUNT(*) FROM dbo.Client WHERE DischargeDate IS NULL GROUP BY ProgramId", "tables": ["dbo.Client", "dbo.Program"] }
+  ]
+}
