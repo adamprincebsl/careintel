@@ -15,6 +15,7 @@ import { authorize } from '../lib/authz.js';
 import { repo } from '../lib/cosmos.js';
 import { buildUserDoc } from '../lib/userModel.js';
 import { SYSTEM_ROLES } from '../lib/permissions.js';
+import { writeAudit } from '../lib/audit.js';
 
 app.http('adminUsersList', {
   methods: ['GET'],
@@ -44,8 +45,8 @@ app.http('adminUserPut', {
   methods: ['PUT'],
   authLevel: 'anonymous',
   route: 'admin/users/{oid}',
-  handler: async (request) => {
-    await authorize(request, 'admin.manage');
+  handler: async (request, context) => {
+    const { principal } = await authorize(request, 'admin.manage');
     const oid = request.params.oid;
     const body = await request.json().catch(() => ({}));
     const users = repo('users');
@@ -63,6 +64,15 @@ app.http('adminUserPut', {
         now: new Date().toISOString()
       });
       const saved = await users.upsert(doc);
+      await writeAudit({
+        actor: principal,
+        action: existing ? 'user.update' : 'user.provision',
+        targetId: oid,
+        before: existing,
+        after: saved,
+        summary: `roles=[${saved.roles}] perms=[${saved.permissions}]`,
+        logger: context
+      });
       return { status: 200, jsonBody: saved };
     } catch (err) {
       return { status: 400, jsonBody: { error: err.message } };

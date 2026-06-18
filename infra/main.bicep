@@ -88,6 +88,7 @@ var containers = [
   { name: 'aiBudgets',     pk: '/pk',        ttl: -1 }
   { name: 'accessLog',     pk: '/pk',        ttl: -1 }
   { name: 'appSettings',   pk: '/pk',        ttl: -1 }
+  { name: 'auditLog',      pk: '/pk',        ttl: -1 }
 ]
 
 // -----------------------------------------------------------------------------

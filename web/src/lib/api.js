@@ -50,5 +50,7 @@ export const api = {
   c360Metrics: (key) => getJson('/api/c360/metrics' + (key ? `?key=${encodeURIComponent(key)}` : '')),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
-  saveSettings: (patch) => putJson('/api/admin/settings', patch)
+  saveSettings: (patch) => putJson('/api/admin/settings', patch),
+  // Admin/config audit
+  auditLog: () => getJson('/api/admin/audit')
 };

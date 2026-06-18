@@ -138,9 +138,10 @@ Goal: AI-derived flags beyond the cap app's own scoring.
    `signals`, `draftedReports`) + idle timeout. `GET /api/settings` (all authed) /
    `PUT /api/admin/settings` (admin.manage), `settings.js` validation, the
    `/admin/settings` SPA page, and nav gated on flags via auth-context.
-4. App-wide audit log of report generation / signal config changes (compliance
-   teams will ask — make it default behavior, per the cap app's audit-by-default
-   principle).
+4. ✅ Admin/config audit log — `auditLog` container + `audit.writeAudit` wired
+   into user provisioning + settings changes (actor / action / before-after /
+   when); `GET /api/admin/audit` + the `/admin/audit` SPA tab. *Extend to report
+   generation / signal config as those land.*
 
 **Exit:** an admin can provision users, assign roles, and toggle features without a deploy.
 
