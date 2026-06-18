@@ -6,8 +6,7 @@ import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
 import AdminTabs from '../components/AdminTabs';
 
-const ROLES = ['CI_Admin', 'CI_Analyst', 'CI_Viewer'];
-const EMPTY = { oid: '', name: '', email: '', roles: [], viewPii: false, scopeMode: 'none', programIds: '', states: '' };
+const EMPTY = { oid: '', name: '', email: '', roles: [], viewInitials: false, viewDwLink: false, scopeMode: 'none', programIds: '', states: '' };
 
 // Provisioning UI for the user/role/scope model. Gated on admin.manage. Writes
 // through PUT /api/admin/users/{oid}. Mirrors api/src/lib/userModel.js shape.
@@ -20,6 +19,8 @@ export default function AdminUsers() {
 
   const allowed = can(user, 'admin.manage');
   const { data, isLoading } = useQuery({ queryKey: ['admin-users'], queryFn: api.listUsers, enabled: allowed });
+  const { data: rolesData } = useQuery({ queryKey: ['admin-roles'], queryFn: api.listRoles, enabled: allowed });
+  const ROLES = (rolesData?.roles || []).map((r) => r.name);
 
   if (!allowed) {
     return (
@@ -38,7 +39,8 @@ export default function AdminUsers() {
       name: u.name || '',
       email: u.email || '',
       roles: u.roles || [],
-      viewPii: (u.permissions || []).includes('client.viewPii'),
+      viewInitials: (u.permissions || []).includes('client.viewInitials'),
+      viewDwLink: (u.permissions || []).includes('client.viewDwLink'),
       scopeMode: scope === '*' ? 'all' : (scope?.programIds?.length || scope?.states?.length ? 'scoped' : 'none'),
       programIds: scope === '*' ? '' : (scope?.programIds || []).join(','),
       states: scope === '*' ? '' : (scope?.states || []).join(',')
@@ -59,11 +61,15 @@ export default function AdminUsers() {
       : form.scopeMode === 'scoped' ? { programIds: list(form.programIds), states: list(form.states) }
       : { programIds: [], states: [] };
     try {
+      const permissions = [
+        ...(form.viewInitials ? ['client.viewInitials'] : []),
+        ...(form.viewDwLink ? ['client.viewDwLink'] : [])
+      ];
       await api.saveUser(form.oid.trim(), {
         name: form.name || undefined,
         email: form.email || undefined,
         roles: form.roles,
-        permissions: form.viewPii ? ['client.viewPii'] : [],
+        permissions,
         clientScope
       });
       setMsg({ ok: true, text: `Saved ${form.oid}` });
@@ -95,7 +101,7 @@ export default function AdminUsers() {
             {(data?.users || []).map((u) => (
               <tr key={u.id} className="border-t border-border">
                 <td className="px-3 py-2">{u.email || u.oid}{!u.provisioned && <span className="ml-2 rounded bg-gold-tint px-1 text-[10px] text-gold-dark">unprovisioned</span>}</td>
-                <td className="px-3 py-2 text-ink-muted">{(u.roles || []).join(', ') || '—'}{(u.permissions || []).includes('client.viewPii') && <span className="ml-1 rounded bg-beacon/10 px-1 text-[10px] text-beacon">PII</span>}</td>
+                <td className="px-3 py-2 text-ink-muted">{(u.roles || []).join(', ') || '—'}{(u.permissions || []).includes('client.viewInitials') && <span className="ml-1 rounded bg-beacon/10 px-1 text-[10px] text-beacon">initials</span>}{(u.permissions || []).includes('client.viewDwLink') && <span className="ml-1 rounded bg-gold-tint px-1 text-[10px] text-gold-dark">DW</span>}</td>
                 <td className="px-3 py-2 text-ink-muted">{scopeLabel(u)}</td>
                 <td className="px-3 py-2 text-right"><button onClick={() => edit(u)} className="text-beacon hover:underline">edit</button></td>
               </tr>
@@ -131,10 +137,16 @@ export default function AdminUsers() {
           </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.viewPii} onChange={(e) => setForm({ ...form, viewPii: e.target.checked })} />
-          Grant <code className="rounded bg-surface px-1">client.viewPii</code> (view client names — PHI)
-        </label>
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.viewInitials} onChange={(e) => setForm({ ...form, viewInitials: e.target.checked })} />
+            Grant <code className="rounded bg-surface px-1">client.viewInitials</code> (client initials + context in-app)
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.viewDwLink} onChange={(e) => setForm({ ...form, viewDwLink: e.target.checked })} />
+            Grant <code className="rounded bg-surface px-1">client.viewDwLink</code> (approved link-back to full record in the DW)
+          </label>
+        </div>
 
         <div>
           <div className="mb-1 text-sm font-medium">Client PII scope</div>

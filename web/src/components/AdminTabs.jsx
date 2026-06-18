@@ -10,6 +10,7 @@ export default function AdminTabs() {
   return (
     <nav className="mb-4 flex gap-2 border-b border-border">
       <NavLink to="/admin/users" className={tab}>Users</NavLink>
+      <NavLink to="/admin/roles" className={tab}>Roles</NavLink>
       <NavLink to="/admin/settings" className={tab}>Settings</NavLink>
       <NavLink to="/admin/audit" className={tab}>Audit</NavLink>
     </nav>

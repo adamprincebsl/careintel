@@ -5,7 +5,7 @@
 //   roles[]        — system role names (resolved to permissions via SYSTEM_ROLES)
 //   permissions[]  — direct permission grants on top of roles
 //   clientScope    — '*' (all) OR { programIds:[], states:[] }; controls which
-//                    identified clients the user may view (client.viewPii path).
+//                    clients the user may view (client.viewInitials / viewDwLink).
 //                    Fail-closed: absent/empty scope => no client access.
 
 import { PERMISSIONS, SYSTEM_ROLES } from './permissions.js';
@@ -21,8 +21,12 @@ export function validateClientScope(scope) {
   return { programIds, states };
 }
 
-export function validateRoles(roles = []) {
-  const bad = roles.filter((r) => !SYSTEM_ROLES[r]);
+// validRoles: optional Set of allowed role names (system + custom). Defaults to
+// system roles only — the CLI bootstrap path uses system roles; the admin
+// endpoint passes the full set so custom roles are assignable.
+export function validateRoles(roles = [], validRoles = null) {
+  const allowed = validRoles || new Set(Object.keys(SYSTEM_ROLES));
+  const bad = roles.filter((r) => !allowed.has(r));
   if (bad.length) throw new Error(`Unknown role(s): ${bad.join(', ')}`);
   return roles;
 }
@@ -37,10 +41,10 @@ export function validatePermissions(permissions = []) {
  * Build a validated user profile doc. `oid` is the Entra object id (= doc id).
  * `existing` (optional) is merged so a partial update keeps prior fields.
  */
-export function buildUserDoc({ oid, name, email, roles, permissions, clientScope, existing = null, now }) {
+export function buildUserDoc({ oid, name, email, roles, permissions, clientScope, existing = null, now, validRoles = null }) {
   if (!oid) throw new Error('oid is required');
   const merged = existing || {};
-  const finalRoles = validateRoles(roles ?? merged.roles ?? []);
+  const finalRoles = validateRoles(roles ?? merged.roles ?? [], validRoles);
   const finalPerms = validatePermissions(permissions ?? merged.permissions ?? []);
   const finalScope = clientScope !== undefined
     ? validateClientScope(clientScope)

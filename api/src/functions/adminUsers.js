@@ -4,7 +4,7 @@
 //   GET    /api/admin/users/{oid}      — one user
 //   PUT    /api/admin/users/{oid}      — create/update: roles, permissions, clientScope
 //
-// All gated on `admin.manage`. This is how a user gets `client.viewPii` AND a
+// All gated on `admin.manage`. This is how a user gets client permissions AND a
 // `clientScope`, which together unlock the client-detail path (clients.js).
 //
 // Note: a user's Entra OID is the doc id. The admin supplies it (find it in the
@@ -14,7 +14,7 @@ import { app } from '@azure/functions';
 import { authorize } from '../lib/authz.js';
 import { repo } from '../lib/cosmos.js';
 import { buildUserDoc } from '../lib/userModel.js';
-import { SYSTEM_ROLES } from '../lib/permissions.js';
+import { getRoleMap } from '../lib/roles.js';
 import { writeAudit } from '../lib/audit.js';
 
 app.http('adminUsersList', {
@@ -23,8 +23,11 @@ app.http('adminUsersList', {
   route: 'admin/users',
   handler: async (request) => {
     await authorize(request, 'admin.manage');
-    const users = await repo('users').list({ query: "SELECT * FROM c WHERE c.pk = 'users'" });
-    return { status: 200, jsonBody: { users, roleCatalog: Object.keys(SYSTEM_ROLES) } };
+    const [users, roleMap] = await Promise.all([
+      repo('users').list({ query: "SELECT * FROM c WHERE c.pk = 'users'" }),
+      getRoleMap()
+    ]);
+    return { status: 200, jsonBody: { users, roleCatalog: Object.keys(roleMap) } };
   }
 });
 
@@ -52,7 +55,7 @@ app.http('adminUserPut', {
     const users = repo('users');
 
     try {
-      const existing = await users.get(oid, 'users');
+      const [existing, roleMap] = await Promise.all([users.get(oid, 'users'), getRoleMap()]);
       const doc = buildUserDoc({
         oid,
         name: body.name,
@@ -61,7 +64,8 @@ app.http('adminUserPut', {
         permissions: body.permissions,
         clientScope: body.clientScope,
         existing,
-        now: new Date().toISOString()
+        now: new Date().toISOString(),
+        validRoles: new Set(Object.keys(roleMap))
       });
       const saved = await users.upsert(doc);
       await writeAudit({

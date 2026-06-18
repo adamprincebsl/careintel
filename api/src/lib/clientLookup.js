@@ -1,26 +1,47 @@
-// Live, read-only lookup of a single identified client from c360 (PHI).
+// Live, read-only client lookup from a c360 **view** (not base tables).
 //
-// This is the ONE sanctioned path that returns identifying client data. It is a
-// PASS-THROUGH: read live from Fabric per request, hand to the authorized
-// caller, never persist (no Cosmos, no cache, no logs of the values, no
-// embeddings). See clients.js for the authorization + audit wrapper.
+// The app is INITIALS-ONLY: we read the minimum columns from the data-team's
+// curated view, compute initials in flight, and return ONLY initials + program/
+// location context. Full name / DOB are never returned, never cached, never
+// persisted. The full identified record is reached separately via an approved
+// link-back to the DW (see functions/clients.js dw-link).
 //
-// ⚠️ ILLUSTRATIVE projection — column names match docs/c360-annotations.example.json.
-// Finalize against the real c360 dictionary (C1) once the dump is reviewed.
+// Source view is configurable so the data team controls exactly what's exposed:
+//   FABRIC_C360_CLIENT_VIEW   e.g. dbo.vw_ClientDirectory  (default dbo.vw_Client)
+// Ideally the view itself exposes only what we need (or an Initials column); if
+// it returns FirstName/LastName we reduce them to initials here and drop them.
 
 import { c360Query } from './fabricC360.js';
 
-// Minimum-necessary projection: name + program/location + enrollment dates.
-// DOB and other identifiers are deliberately NOT selected — they aren't needed
-// for the client detail surface, so they never leave c360.
-export async function getClientById(clientId) {
+const CLIENT_VIEW = () => process.env.FABRIC_C360_CLIENT_VIEW || 'dbo.vw_Client';
+
+export function toInitials(first, last) {
+  const ch = (s) => (s || '').trim().charAt(0).toUpperCase();
+  const parts = [ch(first), ch(last)].filter(Boolean);
+  return parts.length ? parts.map((c) => `${c}.`).join('') : '—';
+}
+
+/**
+ * Returns a de-identified display object for a client, or null if not found:
+ *   { clientId, initials, programId, state, admissionDate, dischargeDate }
+ * FirstName/LastName are read only to derive initials and are then discarded.
+ */
+export async function getClientForDisplay(clientId) {
   const rows = await c360Query(
     `SELECT TOP (1)
-        ClientId, FirstName, LastName,
-        ProgramId, State, AdmissionDate, DischargeDate
-     FROM dbo.Client
+        ClientId, FirstName, LastName, ProgramId, State, AdmissionDate, DischargeDate
+     FROM ${CLIENT_VIEW()}
      WHERE ClientId = @id`,
     { id: clientId }
   );
-  return rows[0] || null;
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    clientId: r.ClientId,
+    initials: toInitials(r.FirstName, r.LastName),
+    programId: r.ProgramId ?? null,
+    state: r.State ?? null,
+    admissionDate: r.AdmissionDate ?? null,
+    dischargeDate: r.DischargeDate ?? null
+  };
 }

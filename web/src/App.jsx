@@ -6,6 +6,7 @@ import Assistant from './pages/Assistant';
 import ClientDetail from './pages/ClientDetail';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
+import AdminRoles from './pages/AdminRoles';
 import AdminAudit from './pages/AdminAudit';
 import C360Reports from './pages/C360Reports';
 
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/clients" element={<ClientDetail />} />
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
+          <Route path="/admin/roles" element={<AdminRoles />} />
           <Route path="/admin/audit" element={<AdminAudit />} />
         </Routes>
       </main>

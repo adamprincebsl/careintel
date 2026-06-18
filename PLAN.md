@@ -132,8 +132,12 @@ Goal: AI-derived flags beyond the cap app's own scoring.
 
 ## Phase 6 — Admin & RBAC UI (`admin.manage`)
 
-1. ✅ `users` CRUD + role/scope assignment UI — `GET/PUT /api/admin/users`, `userModel.js` validation, `scripts/provision-user.mjs` bootstrap, and the `/admin/users` SPA page (roles, `client.viewPii`, `clientScope`). *Remaining: custom roles, settings/feature flags, audit of admin actions (items 2–4).*
-2. Custom roles in a `roles` container (cap-app pattern: `module` + `permissions[]`).
+1. ✅ `users` CRUD + role/scope assignment UI — `GET/PUT /api/admin/users`, `userModel.js` validation, `scripts/provision-user.mjs` bootstrap, and the `/admin/users` SPA page (roles, client permissions, `clientScope`). *Remaining: custom roles, settings/feature flags, audit of admin actions (items 2–4).*
+2. ✅ Custom roles in a `roles` container — `roles.js` (system+custom merge,
+   `buildRoleDoc` validation), `GET/PUT/DELETE /api/admin/roles`, the
+   `/admin/roles` SPA page, and `authz.getEffectivePermissions` now resolves via
+   the merged role map so custom roles grant permissions. User form assigns any
+   role (system or custom).
 3. ✅ Settings doc (`appSettings`, id=`app`): feature flags (`assistant`, `c360`,
    `signals`, `draftedReports`) + idle timeout. `GET /api/settings` (all authed) /
    `PUT /api/admin/settings` (admin.manage), `settings.js` validation, the

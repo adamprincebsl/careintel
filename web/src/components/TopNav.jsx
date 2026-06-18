@@ -33,7 +33,7 @@ export default function TopNav() {
               <Database className="h-4 w-4" /> c360
             </NavLink>
           )}
-          {can(user, 'client.viewPii') && (
+          {can(user, 'client.viewInitials') && (
             <NavLink to="/clients" className={navClass}>
               <UserSearch className="h-4 w-4" /> Clients
             </NavLink>

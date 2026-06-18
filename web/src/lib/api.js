@@ -41,8 +41,10 @@ export const api = {
   me: () => getJson('/api/users/me'),
   metricsOverview: () => getJson('/api/metrics/overview'),
   ask: (question) => postJson('/api/assistant/ask', { question }),
-  // Identified client detail (PHI) — live pass-through, never cached client-side.
+  // Client display — initials only, live, never cached client-side.
   client: (id) => getJson(`/api/clients/${encodeURIComponent(id)}`),
+  // Approved link-back to the full record in the DW (audited; returns a URL).
+  clientDwLink: (id) => postJson(`/api/clients/${encodeURIComponent(id)}/dw-link`, {}),
   // Admin user provisioning
   listUsers: () => getJson('/api/admin/users'),
   saveUser: (oid, body) => putJson(`/api/admin/users/${encodeURIComponent(oid)}`, body),
@@ -52,5 +54,12 @@ export const api = {
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),
   // Admin/config audit
-  auditLog: () => getJson('/api/admin/audit')
+  auditLog: () => getJson('/api/admin/audit'),
+  // Custom roles
+  listRoles: () => getJson('/api/admin/roles'),
+  saveRole: (name, body) => putJson(`/api/admin/roles/${encodeURIComponent(name)}`, body),
+  deleteRole: (name) => fetch(`/api/admin/roles/${encodeURIComponent(name)}`, { method: 'DELETE' }).then((r) => {
+    if (!r.ok) return r.text().then((t) => { throw new Error(t || r.statusText); });
+    return r.json();
+  })
 };

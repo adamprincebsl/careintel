@@ -10,7 +10,8 @@ export const PERMISSIONS = {
   'insight.view': 'See AI narrative insights on reports',
   'signal.view': 'View predictive risk-scoring signals',
   'signal.manage': 'Configure signal thresholds / models',
-  'client.viewPii': 'View client names / identifying details (PHI)',
+  'client.viewInitials': 'View client initials + program context (de-identified)',
+  'client.viewDwLink': 'Follow the approved link-back to the full client record in the data warehouse',
   'admin.manage': 'Manage users, roles, and settings'
 };
 

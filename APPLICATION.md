@@ -66,7 +66,10 @@ Identical seams to the rest of the Beacon platform — do not reinvent.
 - **Permissions:** flat dotted-string IDs in `api/src/lib/permissions.js`,
   mirrored client-side in `web/src/lib/permissions.js`. Module gate
   `module.intelligence.access`; feature perms for `report.*`, `assistant.use`,
-  `insight.view`, `signal.*`, `admin.manage`.
+  `insight.view`, `signal.*`, `client.viewInitials`, `client.viewDwLink`, `admin.manage`.
+- **Roles:** system roles (code-defined, read-only) + custom roles (admin-defined
+  in the `roles` container). `authz.getEffectivePermissions` resolves a user's
+  permissions as direct grants ∪ the permissions of every role they hold.
 - **User record:** one Cosmos doc per Entra OID in the `users` container, joined
   at `/api/users/me`. Unprovisioned users land on an "Account not provisioned"
   panel until an admin assigns roles. Carries `clientScope` (`'*'` or
@@ -95,10 +98,12 @@ Identical seams to the rest of the Beacon platform — do not reinvent.
 | `accessLog` | `/pk` | — | PHI access audit (who/when/whichClientId/outcome) |
 | `appSettings` | `/pk` | — | Feature flags + idle timeout (single doc id=`app`) |
 | `auditLog` | `/pk` | — | Admin/config action audit (actor/action/before-after/when) |
+| `roles` | `/pk` | — | Admin-defined custom roles (name + permissions[]) |
 
 All BCI Cosmos containers are **PHI-free**. Identified client data (names) is
 **never stored** — it's read live from c360 and passed through to an authorized,
-location-scoped viewer (`client.viewPii`), with each view audited. The c360 ERD +
+location-scoped viewer as **initials only** (`client.viewInitials`); the full
+record opens via an approved, audited link-back to the DW (`client.viewDwLink`). The c360 ERD +
 full data model is in [docs/ERD.md](docs/ERD.md).
 
 ### 3.3 Read-only source data (cap app Cosmos `capapp`)

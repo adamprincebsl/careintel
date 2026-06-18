@@ -15,7 +15,7 @@
 //
 //   # scoped analyst (sees only these programs/states for client PII):
 //   node scripts/provision-user.mjs --oid=<oid> --roles=CI_Analyst \
-//        --permissions=client.viewPii --programs=12345,12346 --states=MI,OH
+//        --permissions=client.viewInitials --programs=12345,12346 --states=MI,OH
 //
 // Flags:
 //   --oid=          required — Entra object id (doc id)

@@ -20,6 +20,9 @@
     "_comment_c360": "Read-ONLY c360 client-360 data in Microsoft Fabric (core-prod-db). Auth uses your `az login` locally / the Function App MI in Azure. Queries only complete from a network with line-of-sight to the Fabric backend (your corp network or Azure) — see docs/C360_INTELLIGENCE_PLAN.md.",
     "FABRIC_C360_SQL_ENDPOINT": "4trxo4y44m3e7byjyu2g7pz6le-xdpozjn34hau3cztgs66ay2wlm.datawarehouse.fabric.microsoft.com",
     "FABRIC_C360_WAREHOUSE_NAME": "core-prod-db",
+    "_comment_c360_views": "We read curated VIEWS the data team exposes, not base tables. Set the client directory view + the approved DW deep-link template ({clientId} is substituted).",
+    "FABRIC_C360_CLIENT_VIEW": "dbo.vw_Client",
+    "C360_DW_LINK_TEMPLATE": "",
 
     "_comment_aoai": "Leave AOAI_* unset to run all AI features in deterministic mock mode (no Azure OpenAI resource needed).",
     "AOAI_ENDPOINT": "",

@@ -5,13 +5,18 @@
 
 import { requireAuth } from './auth.js';
 import { repo } from './cosmos.js';
-import { SYSTEM_ROLES } from './permissions.js';
+import { getRoleMap } from './roles.js';
 
-/** Resolve { profile, permissions[] } for an authenticated principal. */
+/** Resolve { profile, permissions[] } for an authenticated principal.
+ *  Permissions = direct grants ∪ permissions of every role the user holds
+ *  (system + custom, via the merged role map). */
 export async function getEffectivePermissions(principal) {
-  const profile = await repo('users').get(principal.userId, 'users');
+  const [profile, roleMap] = await Promise.all([
+    repo('users').get(principal.userId, 'users'),
+    getRoleMap()
+  ]);
   const perms = new Set(profile?.permissions || []);
-  for (const r of profile?.roles || []) for (const p of SYSTEM_ROLES[r] || []) perms.add(p);
+  for (const r of profile?.roles || []) for (const p of (roleMap[r]?.permissions || [])) perms.add(p);
   return { profile, permissions: [...perms] };
 }
 

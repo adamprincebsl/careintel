@@ -55,6 +55,12 @@ param fabricC360SqlEndpoint string = '4trxo4y44m3e7byjyu2g7pz6le-xdpozjn34hau3cz
 @description('c360 Fabric warehouse name / initial catalog.')
 param fabricC360WarehouseName string = 'core-prod-db'
 
+@description('Curated c360 view the app reads client display data from (we never query base tables).')
+param fabricC360ClientView string = 'dbo.vw_Client'
+
+@description('Approved deep-link template to the full client record in the DW (Power BI / Fabric). {clientId} is substituted. Empty disables the link-back.')
+param c360DwLinkTemplate string = ''
+
 @description('Existing Azure OpenAI account name to grant the Function App access to. Empty => AI runs in mock mode and no RBAC is assigned.')
 param aoaiAccountName string = ''
 
@@ -89,6 +95,7 @@ var containers = [
   { name: 'accessLog',     pk: '/pk',        ttl: -1 }
   { name: 'appSettings',   pk: '/pk',        ttl: -1 }
   { name: 'auditLog',      pk: '/pk',        ttl: -1 }
+  { name: 'roles',         pk: '/pk',        ttl: -1 }
 ]
 
 // -----------------------------------------------------------------------------
@@ -254,6 +261,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'CAP_COSMOS_DATABASE', value: capCosmosDatabaseName }
         { name: 'FABRIC_C360_SQL_ENDPOINT', value: fabricC360SqlEndpoint }
         { name: 'FABRIC_C360_WAREHOUSE_NAME', value: fabricC360WarehouseName }
+        { name: 'FABRIC_C360_CLIENT_VIEW', value: fabricC360ClientView }
+        { name: 'C360_DW_LINK_TEMPLATE', value: c360DwLinkTemplate }
         { name: 'AOAI_ENDPOINT', value: aoaiEndpoint }
         { name: 'AOAI_DEPLOYMENT', value: aoaiDeployment }
         { name: 'DASHBOARD_URL', value: dashboardUrl }

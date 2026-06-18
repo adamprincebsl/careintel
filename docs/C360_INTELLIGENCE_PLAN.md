@@ -59,19 +59,19 @@ stays PHI-free**" defines exactly where each kind of data may flow:
    scope (BCI inherits the cap-app RBAC model) so a user never sees data they
    aren't entitled to.
 
-**Sanctioned exception — identified client display (pass-through).** Some
-surfaces legitimately need a client's *name* (e.g. the **client detail page**).
-This is allowed **without breaking the PHI-free-Cosmos rule** via a strict
-pass-through: read the identified row **live from c360 per request**, return it
-to an authorized caller, and **never persist it** (no Cosmos, no cache, no
-embedding, response marked `no-store`). It is gated by the `client.viewPii`
-permission **and** location scope (`clientInScope`), and **every view is
-audit-logged** to the `accessLog` container — which records *who / when / which
-ClientId / outcome*, never the name or other PHI. (Storing the accessed ClientId
-is required for HIPAA access logging and is itself not a name/DOB.)
-Implemented in `lib/clientLookup.js` + `functions/clients.js`. The projection is
-**minimum-necessary** — name + program/location + enrollment dates only; **DOB
-and other identifiers are not selected**, so they never leave c360.
+**Client display — initials only, full record via approved DW link-back.** The
+app shows **initials only** (e.g. "J.D.") + program/location context — never full
+names or DOB. We read the minimum columns from a **data-team view** (not base
+tables; `FABRIC_C360_CLIENT_VIEW`), compute initials in flight, and **discard the
+name** — nothing identifying is returned, cached, embedded, or persisted
+(response `no-store`). Gated by `client.viewInitials` **and** location scope
+(`clientInScope`); audited to `accessLog` (`who / when / clientId / outcome`).
+
+The **full identified record** is never rendered in-app — it opens via an
+**approved link-back to the data warehouse** (`C360_DW_LINK_TEMPLATE`, gated by
+`client.viewDwLink` + scope, the follow audited as `dw-link-followed`). The DW
+enforces its own access on top. Implemented in `lib/clientLookup.js` +
+`functions/clients.js`.
 
 ---
 
@@ -218,7 +218,7 @@ tool call, logs each turn to `aiTurns`, and enforces per-user token budgets.
 | **C3 — Tools + Assistant** | Curated c360 tool catalog wired into the assistant; `aiTurns`/`aiBudgets`; audit + scope enforcement | "Census trend in MN this year?" answered correctly with citations |
 | **C4 — RAG** | Non-PHI vector index in `c360Vectors`; `search_context` tool | "What does 'active census' mean / which metric?" answered from retrieval |
 | **C5 — Insights & signals** | De-identified AI narratives + predictive signals over c360 | Insight cards on c360 reports; nightly signals populated |
-| **Cc — Client display** | ✅ Scaffolded — `client.viewPii` perm + location scope + `accessLog` audit; `GET /api/clients/{id}` (live pass-through, `no-store`, never persisted, minimum-necessary projection: name + program, **no DOB**); SPA client-detail page; **provisioning** via `PUT /api/admin/users/{oid}` + `scripts/provision-user.mjs` (sets roles + `clientScope`). **Remaining:** finalize the live projection against the real dictionary. | Authorized, scoped user views a client's name live; the view is audited; nothing persisted |
+| **Cc — Client display** | ✅ Scaffolded — **initials only** in-app + **approved DW link-back** for the full record. `client.viewInitials` / `client.viewDwLink` + location scope + `accessLog` audit; reads a c360 **view** (`GET /api/clients/{id}`, `POST .../dw-link`), `no-store`, nothing persisted; SPA client page; provisioning via `/admin/users`. **Remaining:** data team supplies the client **view name** + the **DW deep-link** target. | Scoped user sees initials live; opens full record via audited DW link; nothing persisted |
 
 C0–C2 are the foundation; C3 is the headline AI capability; C4–C5 layer on.
 

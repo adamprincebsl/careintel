@@ -25,10 +25,12 @@ export const PERMISSIONS = {
   'signal.view': 'View predictive risk-scoring signals',
   'signal.manage': 'Configure signal thresholds / models',
 
-  // Identified client data (PHI) — read live from c360, never persisted.
-  // Holders see client names/identifiers ONLY for clients in their location
-  // scope, and every view is audit-logged. Grant sparingly.
-  'client.viewPii': 'View client names / identifying details (PHI)',
+  // Client identity. The app shows INITIALS ONLY (de-identified), read live from
+  // c360 views, never persisted, scoped to the user's locations, and audited.
+  // The full identified record is reached only via an approved link-back to the
+  // data warehouse (which enforces its own access) — gated separately.
+  'client.viewInitials': 'View client initials + program context (de-identified)',
+  'client.viewDwLink': 'Follow the approved link-back to the full client record in the data warehouse',
 
   // Admin
   'admin.manage': 'Manage users, roles, and settings'
