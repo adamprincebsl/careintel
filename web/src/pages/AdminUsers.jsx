@@ -4,6 +4,7 @@ import { ShieldAlert, Save } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
+import AdminTabs from '../components/AdminTabs';
 
 const ROLES = ['CI_Admin', 'CI_Analyst', 'CI_Viewer'];
 const EMPTY = { oid: '', name: '', email: '', roles: [], viewPii: false, scopeMode: 'none', programIds: '', states: '' };
@@ -81,7 +82,8 @@ export default function AdminUsers() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Users</h1>
+      <h1 className="text-xl font-semibold">Admin</h1>
+      <AdminTabs />
 
       <section className="overflow-hidden rounded border border-border bg-white shadow-sm">
         <table className="w-full text-sm">

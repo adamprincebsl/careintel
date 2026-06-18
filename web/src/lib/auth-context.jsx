@@ -16,6 +16,7 @@ const IS_DEV = import.meta.env.DEV;
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -30,8 +31,8 @@ export function AuthProvider({ children }) {
             return;
           }
         }
-        const profile = await api.me();
-        if (!cancelled) setUser(profile);
+        const [profile, appSettings] = await Promise.all([api.me(), api.settings()]);
+        if (!cancelled) { setUser(profile); setSettings(appSettings); }
       } catch (e) {
         if (!cancelled) setError(e);
       } finally {
@@ -41,7 +42,7 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true; };
   }, []);
 
-  const value = useMemo(() => ({ user, loading, error }), [user, loading, error]);
+  const value = useMemo(() => ({ user, settings, loading, error }), [user, settings, loading, error]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

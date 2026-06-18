@@ -134,8 +134,10 @@ Goal: AI-derived flags beyond the cap app's own scoring.
 
 1. ✅ `users` CRUD + role/scope assignment UI — `GET/PUT /api/admin/users`, `userModel.js` validation, `scripts/provision-user.mjs` bootstrap, and the `/admin/users` SPA page (roles, `client.viewPii`, `clientScope`). *Remaining: custom roles, settings/feature flags, audit of admin actions (items 2–4).*
 2. Custom roles in a `roles` container (cap-app pattern: `module` + `permissions[]`).
-3. Settings doc (`appSettings`, id=`app`): idle timeout, feature flags
-   (`features.signals`, `features.draftedReports`), AOAI on/off surface.
+3. ✅ Settings doc (`appSettings`, id=`app`): feature flags (`assistant`, `c360`,
+   `signals`, `draftedReports`) + idle timeout. `GET /api/settings` (all authed) /
+   `PUT /api/admin/settings` (admin.manage), `settings.js` validation, the
+   `/admin/settings` SPA page, and nav gated on flags via auth-context.
 4. App-wide audit log of report generation / signal config changes (compliance
    teams will ask — make it default behavior, per the cap app's audit-by-default
    principle).

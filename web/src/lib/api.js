@@ -45,5 +45,10 @@ export const api = {
   client: (id) => getJson(`/api/clients/${encodeURIComponent(id)}`),
   // Admin user provisioning
   listUsers: () => getJson('/api/admin/users'),
-  saveUser: (oid, body) => putJson(`/api/admin/users/${encodeURIComponent(oid)}`, body)
+  saveUser: (oid, body) => putJson(`/api/admin/users/${encodeURIComponent(oid)}`, body),
+  // c360 de-identified rollups
+  c360Metrics: (key) => getJson('/api/c360/metrics' + (key ? `?key=${encodeURIComponent(key)}` : '')),
+  // App settings / feature flags
+  settings: () => getJson('/api/settings'),
+  saveSettings: (patch) => putJson('/api/admin/settings', patch)
 };

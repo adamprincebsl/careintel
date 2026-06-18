@@ -93,6 +93,7 @@ Identical seams to the rest of the Beacon platform — do not reinvent.
 | `aiTurns` | `/userOid` | 90 day | Per-turn AI audit trail |
 | `aiBudgets` | `/pk` | — | Per-user AI token/turn budgets |
 | `accessLog` | `/pk` | — | PHI access audit (who/when/whichClientId/outcome) |
+| `appSettings` | `/pk` | — | Feature flags + idle timeout (single doc id=`app`) |
 
 All BCI Cosmos containers are **PHI-free**. Identified client data (names) is
 **never stored** — it's read live from c360 and passed through to an authorized,

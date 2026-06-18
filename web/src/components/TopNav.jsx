@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { BarChart3, MessageSquareText, Sparkles, UserSearch, Settings } from 'lucide-react';
+import { BarChart3, MessageSquareText, Sparkles, UserSearch, Settings, Database } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
 
@@ -10,7 +10,8 @@ function navClass({ isActive }) {
 }
 
 export default function TopNav() {
-  const { user } = useAuth();
+  const { user, settings } = useAuth();
+  const features = settings?.features || {};
   return (
     <header className="bg-beacon text-white shadow">
       <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3">
@@ -22,9 +23,16 @@ export default function TopNav() {
           <NavLink to="/" end className={navClass}>
             <BarChart3 className="h-4 w-4" /> Dashboard
           </NavLink>
-          <NavLink to="/assistant" className={navClass}>
-            <MessageSquareText className="h-4 w-4" /> Assistant
-          </NavLink>
+          {features.assistant !== false && (
+            <NavLink to="/assistant" className={navClass}>
+              <MessageSquareText className="h-4 w-4" /> Assistant
+            </NavLink>
+          )}
+          {features.c360 !== false && can(user, 'report.view') && (
+            <NavLink to="/c360" className={navClass}>
+              <Database className="h-4 w-4" /> c360
+            </NavLink>
+          )}
           {can(user, 'client.viewPii') && (
             <NavLink to="/clients" className={navClass}>
               <UserSearch className="h-4 w-4" /> Clients
