@@ -12,16 +12,31 @@ workspace as `BSL_Silver_Warehouse`.
 
 ## A. To run any live c360 query from Azure  — **hard blocker**
 
-1. **Fabric workspace Viewer grant for the BCI managed identity.**
-   After the app is deployed, its Function App (`func-beacon-care-intelligence`)
-   gets a system-assigned managed identity. A Fabric **workspace owner** must add
-   that identity as **Viewer** on the workspace containing `core-prod-db` (same
-   procedure the cap app used — `beacon-capapp/docs/FABRIC_SETUP.md`).
-   - *Owner:* Fabric workspace admin / data platform team.
-   - *Unblocks:* `/api/internal/c360-health`, all rollups, client lookup. Until
-     this is granted, every live query fails with "login failed."
-   - *Note:* the cap app's MI grant does **not** extend to BCI — it's a separate
-     identity needing its own grant.
+1. **Grant the BCI managed identity read access to `core-prod-db`.** ⬅ **ONLY OPEN BLOCKER**
+
+   `core-prod-db` is a **read-only Fabric SQL endpoint** (confirmed: `CREATE USER …
+   FROM EXTERNAL PROVIDER` returns *"Msg 22424: CREATE USER is not a supported
+   statement type"*), so access **must be granted in the Fabric portal — not via
+   T-SQL.**
+
+   **Forwardable request to the `core-prod-db` owner / data platform team:**
+   > Please grant our app's managed identity **read** on the `core-prod-db` SQL
+   > endpoint:
+   > - **Identity:** `func-beacon-care-intelligence` — Entra **managed identity**,
+   >   object id **`41529756-a1a2-4461-b376-62b43caa1ee5`**
+   > - **How:** in the Fabric portal, **Share `core-prod-db`** (or ⋯ → Manage
+   >   permissions → Add) and check **"Read all data using the SQL analytics
+   >   endpoint"** (ReadData). *(Or add the identity as **Viewer** on the
+   >   workspace — either works.)*
+   > - **Prereq:** the tenant setting **"Service principals can use Fabric APIs"**
+   >   must permit this identity (or add it to the allowed security group).
+   > - **Why:** Beacon Care Intelligence reads c360 **read-only** for reporting/AI.
+
+   - *Owner:* whoever administers `core-prod-db` / its Fabric workspace.
+   - *Unblocks:* `/api/internal/c360-health`, the Explorer, all c360 reads. Until
+     granted, the app's c360 queries fail (502 / "c360 unavailable").
+   - *Verify:* portal Manage-permissions list shows the identity, **and** the
+     app's Explore query returns rows (or `c360-health` → `{ok:true}`).
 
 ---
 
