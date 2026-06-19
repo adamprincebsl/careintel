@@ -339,28 +339,17 @@ resource cosmosDataContributor 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAss
 }
 
 // -----------------------------------------------------------------------------
-// RBAC — Cognitive Services OpenAI User on the AOAI account (optional)
+// RBAC — Azure OpenAI (granted OUT-OF-BAND)
+//
+// The "Cognitive Services OpenAI User" role for this app's managed identity on
+// the AOAI account is granted out-of-band (the AOAI account is typically in a
+// different RG, and a cross-RG role assignment can't be authored here without a
+// module). Grant after deploy, like the cap-Cosmos + Fabric grants:
+//   az role assignment create --assignee <func MI principalId> \
+//     --role "Cognitive Services OpenAI User" --scope <aoai account resource id>
+// AOAI endpoint/deployment are still wired as app settings above; empty => AI
+// runs in mock mode.
 // -----------------------------------------------------------------------------
-
-resource aoaiAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = if (!empty(aoaiAccountName)) {
-  name: aoaiAccountName
-  scope: resourceGroup(aoaiResourceGroup)
-}
-
-// NOTE: when the AOAI account is in this same RG, this assigns the role. When
-// it's cross-RG, deploy a small module scoped to that RG (see PLAN.md) or grant
-// out-of-band. Left here for the common same-RG case.
-var aoaiUserRoleId = 'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services OpenAI User
-
-resource aoaiAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(aoaiAccountName) && aoaiResourceGroup == resourceGroup().name) {
-  scope: aoaiAccount
-  name: guid(aoaiAccount.id, functionApp.id, aoaiUserRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', aoaiUserRoleId)
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
 
 // NOTE: read-only access for this app's managed identity on the cap Cosmos
 // account is granted out-of-band (cross-RG role assignment can't be written
