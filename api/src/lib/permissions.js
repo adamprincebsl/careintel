@@ -32,6 +32,9 @@ export const PERMISSIONS = {
   'client.viewInitials': 'View client initials + program context (de-identified)',
   'client.viewDwLink': 'Follow the approved link-back to the full client record in the data warehouse',
 
+  // c360 build-out tooling — read-only query console (may surface PHI; audited)
+  'c360.query': 'Run read-only c360 queries in the Explorer (build-out tool)',
+
   // Admin
   'admin.manage': 'Manage users, roles, and settings'
 };

@@ -147,6 +147,13 @@ Goal: AI-derived flags beyond the cap app's own scoring.
    when); `GET /api/admin/audit` + the `/admin/audit` SPA tab. *Extend to report
    generation / signal config as those land.*
 
+**PHI safeguards standard** — [SECURITY.md](SECURITY.md) defines the standard the
+app is built to (HIPAA §164.312 mapping). Implemented: least-privilege RBAC +
+location scope, **fail-closed PHI access logging** (`audit.logAccess`),
+**automatic logoff** (`<SessionTimeout>`), minimum-necessary (initials), TLS,
+two audit trails. Tracked gaps: CMK, private endpoints, immutable audit export,
+AOAI human-review opt-out.
+
 **Exit:** an admin can provision users, assign roles, and toggle features without a deploy.
 
 ---

@@ -12,20 +12,15 @@
 
 import { app } from '@azure/functions';
 import { authorize, resolveClientScope, clientInScope } from '../lib/authz.js';
-import { repo } from '../lib/cosmos.js';
+import { logAccess } from '../lib/audit.js';
 import { getClientForDisplay } from '../lib/clientLookup.js';
 
 const NO_STORE = { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
 
-async function audit(principal, clientId, action, outcome) {
-  try {
-    const at = new Date().toISOString();
-    await repo('accessLog').upsert({
-      id: `${principal.userId}_${clientId}_${action}_${at}`,
-      pk: 'accessLog', userOid: principal.userId, action,
-      clientId: String(clientId), outcome, at
-    });
-  } catch { /* best-effort */ }
+// Best-effort audit for non-served outcomes (denied/not-found): no PHI leaves, so
+// a logging hiccup here shouldn't fail the request.
+async function auditQuiet(actor, action, clientId, outcome) {
+  try { await logAccess({ actor, action, clientId, outcome }); } catch { /* logged upstream */ }
 }
 
 // Shared: resolve client + enforce scope. Returns { client } or an error response.
@@ -39,25 +34,38 @@ async function loadScoped(request, perm, action) {
     return { err: { status: 502, headers: NO_STORE, jsonBody: { error: 'c360 unavailable', detail: err.message } } };
   }
   if (!client) {
-    await audit(principal, clientId, action, 'not-found');
+    await auditQuiet(principal, action, clientId, 'not-found');
     return { err: { status: 404, headers: NO_STORE, jsonBody: { error: 'client not found' } } };
   }
   const scope = resolveClientScope(profile);
   if (!clientInScope(scope, { ProgramId: client.programId, State: client.state })) {
-    await audit(principal, clientId, action, 'denied-scope');
+    await auditQuiet(principal, action, clientId, 'denied-scope');
     return { err: { status: 403, headers: NO_STORE, jsonBody: { error: 'client outside your location scope' } } };
   }
   return { principal, clientId, client };
+}
+
+// Fail-closed access log for a served (granted) PHI response: if we can't record
+// the access, we DON'T serve the data (HIPAA audit controls).
+async function logGrantedOrFail(actor, action, clientId, context) {
+  try {
+    await logAccess({ actor, action, clientId, outcome: 'granted' });
+    return null;
+  } catch (err) {
+    context.error(`PHI access log failed — refusing to serve ${action} for ${clientId}: ${err.message}`);
+    return { status: 503, headers: NO_STORE, jsonBody: { error: 'unable to record access; not served' } };
+  }
 }
 
 app.http('clientGet', {
   methods: ['GET'],
   authLevel: 'anonymous',
   route: 'clients/{id}',
-  handler: async (request) => {
+  handler: async (request, context) => {
     const r = await loadScoped(request, 'client.viewInitials', 'view-initials');
     if (r.err) return r.err;
-    await audit(r.principal, r.clientId, 'view-initials', 'granted');
+    const blocked = await logGrantedOrFail(r.principal, 'view-initials', r.clientId, context);
+    if (blocked) return blocked;
     return {
       status: 200,
       headers: NO_STORE,
@@ -70,14 +78,15 @@ app.http('clientDwLink', {
   methods: ['POST'],
   authLevel: 'anonymous',
   route: 'clients/{id}/dw-link',
-  handler: async (request) => {
+  handler: async (request, context) => {
     const r = await loadScoped(request, 'client.viewDwLink', 'dw-link-followed');
     if (r.err) return r.err;
     const template = process.env.C360_DW_LINK_TEMPLATE;
     if (!template) {
       return { status: 404, headers: NO_STORE, jsonBody: { error: 'DW link-back not configured' } };
     }
-    await audit(r.principal, r.clientId, 'dw-link-followed', 'granted');
+    const blocked = await logGrantedOrFail(r.principal, 'dw-link-followed', r.clientId, context);
+    if (blocked) return blocked;
     const url = template.replace('{clientId}', encodeURIComponent(r.clientId));
     return { status: 200, headers: NO_STORE, jsonBody: { url } };
   }

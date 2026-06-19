@@ -55,6 +55,10 @@ export const api = {
   saveSettings: (patch) => putJson('/api/admin/settings', patch),
   // Admin/config audit
   auditLog: () => getJson('/api/admin/audit'),
+  // c360 Explorer (read-only query console)
+  exploreTables: () => getJson('/api/c360/explore/tables'),
+  exploreColumns: (table) => getJson(`/api/c360/explore/columns?table=${encodeURIComponent(table)}`),
+  exploreQuery: (sql, maxRows) => postJson('/api/c360/explore/query', { sql, maxRows }),
   // Custom roles
   listRoles: () => getJson('/api/admin/roles'),
   saveRole: (name, body) => putJson(`/api/admin/roles/${encodeURIComponent(name)}`, body),

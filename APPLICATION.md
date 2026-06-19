@@ -70,6 +70,10 @@ Identical seams to the rest of the Beacon platform — do not reinvent.
 - **Roles:** system roles (code-defined, read-only) + custom roles (admin-defined
   in the `roles` container). `authz.getEffectivePermissions` resolves a user's
   permissions as direct grants ∪ the permissions of every role they hold.
+- **Automatic logoff:** `<SessionTimeout>` signs out after `idleTimeoutMinutes`.
+- **PHI safeguards standard:** even though the BAA permits PHI, the app is built
+  to a documented standard (least-privilege RBAC, fail-closed PHI access logging,
+  minimum-necessary, automatic logoff, TLS, audit) — see [SECURITY.md](SECURITY.md).
 - **User record:** one Cosmos doc per Entra OID in the `users` container, joined
   at `/api/users/me`. Unprovisioned users land on an "Account not provisioned"
   panel until an admin assigns roles. Carries `clientScope` (`'*'` or

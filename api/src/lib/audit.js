@@ -11,6 +11,32 @@
 import { repo } from './cosmos.js';
 
 /**
+ * Log an access to client/PHI data to the durable `accessLog` (HIPAA §164.312(b)
+ * audit controls). Unlike writeAudit, this does NOT swallow errors — callers on
+ * a "granted" path should treat a logging failure as fail-closed (don't serve
+ * the data if the access can't be recorded). Records the client id + outcome,
+ * never the name or other PHI.
+ *
+ * @param {object} p
+ * @param {object} p.actor      { userId } from the principal
+ * @param {string} p.action     e.g. 'view-initials' | 'dw-link-followed'
+ * @param {string} p.clientId
+ * @param {string} p.outcome    'granted' | 'denied-scope' | 'not-found' | ...
+ */
+export async function logAccess({ actor, action, clientId, outcome }) {
+  const at = new Date().toISOString();
+  await repo('accessLog').upsert({
+    id: `${actor?.userId || '?'}_${clientId}_${action}_${at}`,
+    pk: 'accessLog',
+    userOid: actor?.userId || null,
+    action,
+    clientId: String(clientId),
+    outcome,
+    at
+  });
+}
+
+/**
  * @param {object} p
  * @param {object} p.actor      { userId, name } from the principal
  * @param {string} p.action     e.g. 'user.provision' | 'settings.update'

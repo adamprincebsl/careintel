@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import TopNav from './components/TopNav';
+import SessionTimeout from './components/SessionTimeout';
 import { useAuth } from './lib/auth-context';
 import Dashboard from './pages/Dashboard';
 import Assistant from './pages/Assistant';
@@ -9,6 +10,7 @@ import AdminSettings from './pages/AdminSettings';
 import AdminRoles from './pages/AdminRoles';
 import AdminAudit from './pages/AdminAudit';
 import C360Reports from './pages/C360Reports';
+import C360Explore from './pages/C360Explore';
 
 export default function App() {
   const { loading, error, user } = useAuth();
@@ -42,12 +44,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
+      <SessionTimeout />
       <TopNav />
       <main className="mx-auto max-w-7xl px-4 py-6">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/assistant" element={<Assistant />} />
           <Route path="/c360" element={<C360Reports />} />
+          <Route path="/c360/explore" element={<C360Explore />} />
           <Route path="/clients" element={<ClientDetail />} />
           <Route path="/admin/users" element={<AdminUsers />} />
           <Route path="/admin/settings" element={<AdminSettings />} />

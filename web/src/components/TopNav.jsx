@@ -33,6 +33,11 @@ export default function TopNav() {
               <Database className="h-4 w-4" /> c360
             </NavLink>
           )}
+          {can(user, 'c360.query') && (
+            <NavLink to="/c360/explore" className={navClass}>
+              <Database className="h-4 w-4" /> Explore
+            </NavLink>
+          )}
           {can(user, 'client.viewInitials') && (
             <NavLink to="/clients" className={navClass}>
               <UserSearch className="h-4 w-4" /> Clients
