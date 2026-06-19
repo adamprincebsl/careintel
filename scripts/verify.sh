@@ -49,9 +49,11 @@ check "SWA enforces auth (302 to /.auth/login/aad)" \
 check "/api/health responds 200" \
   "[[ \$(curl -s -o /dev/null -w '%{http_code}' https://$SWA_HOSTNAME/api/health) == '200' ]]"
 
-# 3. /api/metrics/overview is auth-walled (401 without principal)
-check "/api/metrics/overview requires auth" \
-  "[[ \$(curl -s -o /dev/null -w '%{http_code}' https://$SWA_HOSTNAME/api/metrics/overview) == '401' ]]"
+# 3. /api/metrics/overview is auth-walled. With the 401->302 responseOverride,
+#    SWA returns 302 (redirect to login) for unauthenticated requests; a bare 401
+#    is also valid. Either means auth is enforced.
+check "/api/metrics/overview requires auth (401 or 302)" \
+  "[[ \$(curl -s -o /dev/null -w '%{http_code}' https://$SWA_HOSTNAME/api/metrics/overview) =~ ^(401|302)\$ ]]"
 
 # 4. Cosmos role assignment exists for the Function App
 PRINCIPAL_ID=$(az functionapp identity show --name "$FUNC_NAME" --resource-group "$RG" --query principalId -o tsv 2>/dev/null || true)
@@ -64,9 +66,10 @@ if [[ -n "$PRINCIPAL_ID" ]]; then
     "az cosmosdb sql role assignment list --account-name 'cosmos-beacon-capapp' --resource-group 'RG-CAPAPP-Prod' --query \"[?principalId=='$PRINCIPAL_ID']\" -o tsv | grep -q ."
 fi
 
-# 5. Key Vault access role assigned
+# 5. Key Vault access role assigned. MSYS_NO_PATHCONV=1 stops Git Bash from
+#    rewriting the "/subscriptions/..." scope into a Windows path.
 check "Key Vault Secrets User role assigned" \
-  "az role assignment list --assignee '$PRINCIPAL_ID' --scope \$(az keyvault show --name \${SHARED_KV:-KV-SWA-APPS} --query id -o tsv) --query \"[?roleDefinitionName=='Key Vault Secrets User']\" -o tsv | grep -q ."
+  "MSYS_NO_PATHCONV=1 az role assignment list --assignee '$PRINCIPAL_ID' --scope \$(az keyvault show --name \${SHARED_KV:-KV-SWA-APPS} --query id -o tsv) --query \"[?roleDefinitionName=='Key Vault Secrets User']\" -o tsv | grep -q ."
 
 # 6. Function App has the cap Cosmos endpoint configured
 check "Function App has CAP_COSMOS_ENDPOINT app setting" \
