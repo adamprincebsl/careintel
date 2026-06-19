@@ -4,7 +4,7 @@
     "identityProviders": {
       "azureActiveDirectory": {
         "registration": {
-          "openIdIssuer": "https://sts.windows.net/REPLACE_WITH_TENANT_ID/",
+          "openIdIssuer": "https://sts.windows.net/7377e3e4-e31c-4f36-8709-c5346fbf3e59/",
           "clientIdSettingName": "AZURE_CLIENT_ID",
           "clientSecretSettingName": "AZURE_CLIENT_SECRET"
         }
