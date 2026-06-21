@@ -50,6 +50,11 @@ export const api = {
   saveUser: (oid, body) => putJson(`/api/admin/users/${encodeURIComponent(oid)}`, body),
   // c360 de-identified rollups
   c360Metrics: (key) => getJson('/api/c360/metrics' + (key ? `?key=${encodeURIComponent(key)}` : '')),
+  // Residential Notes reporting
+  resOptions: () => getJson('/api/c360/residential/options'),
+  resMetrics: (qs) => getJson('/api/c360/residential/metrics' + (qs ? `?${qs}` : '')),
+  resNotes: (qs) => getJson('/api/c360/residential/notes' + (qs ? `?${qs}` : '')),
+  resNote: (id) => getJson(`/api/c360/residential/note/${encodeURIComponent(id)}`),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),

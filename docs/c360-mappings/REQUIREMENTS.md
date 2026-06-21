@@ -15,6 +15,13 @@ Status legend: ✅ built (views-as-code) · 🟡 mapped, view pending · 🔎 ne
 
 ---
 
+> **Shipped: Residential Notes page** (`/c360/residential`) — filters
+> (program/location/date/status), KPIs (documented vs pending, hours charted),
+> hours-charted-per-day chart, Community Engagement / Day-Living (ADLs) / Home
+> Entertainment metrics, note list, and full structured note detail. Endpoints
+> `c360/residential/{options,metrics,notes,note/{id}}`. **State/Market filter +
+> friendly program/location names pending the location-dimension mapping (next).**
+
 ## A. Mapped & built — Residential Service Note (`dbo.BSL_ResidentialServiceNote`)
 
 | # | Requirement / question | Source columns | Transform / de-id | Target view | Status |

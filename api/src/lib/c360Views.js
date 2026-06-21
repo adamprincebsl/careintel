@@ -97,19 +97,95 @@ const STRUCTURED_SELECT = `
  *   `from`/`to` filter ServiceDate; `state` filters draft vs submitted.
  */
 export async function queryResidentialNotesStructured(f = {}) {
+  const { where, params } = residentialWhere(f);
+  params.top = Math.min(Math.max(parseInt(f.top, 10) || 100, 1), 1000);
+  let w = where;
+  if (f.absent === 'exclude') w = (w ? w + ' AND ' : 'WHERE ') + 'ISNULL(n.IsAbsent,0)=0';
+  if (f.absent === 'only') w = (w ? w + ' AND ' : 'WHERE ') + 'n.IsAbsent=1';
+  return c360Query(`${STRUCTURED_SELECT}\n  ${w}\n  ORDER BY n.ServiceDate DESC`, params);
+}
+
+// Shared filter → WHERE builder for residential-note queries.
+// Filters: program (id), location (id), from/to (ServiceDate), status saved|submitted.
+// NOTE: state/market filtering needs the location dimension (not in this table) — pending.
+function residentialWhere(f = {}, alias = 'n') {
   const conds = [];
-  const params = { top: Math.min(Math.max(parseInt(f.top, 10) || 100, 1), 1000) };
-  if (f.program != null) { conds.push('n.Program = @program'); params.program = parseInt(f.program, 10); }
-  if (f.from) { conds.push('n.ServiceDate >= @from'); params.from = f.from; }
-  if (f.to) { conds.push('n.ServiceDate <= @to'); params.to = f.to; }
-  // State keys off SubmissionStatus (validated): NULL = Saved, set = Submitted.
-  if (f.state === 'saved') conds.push('n.SubmissionStatus IS NULL');
-  if (f.state === 'submitted') conds.push('n.SubmissionStatus IS NOT NULL');
-  // Absent notes legitimately skip the activity section.
-  if (f.absent === 'exclude') conds.push('ISNULL(n.IsAbsent, 0) = 0');
-  if (f.absent === 'only') conds.push('n.IsAbsent = 1');
-  const where = conds.length ? `\n  WHERE ${conds.join(' AND ')}` : '';
-  return c360Query(`${STRUCTURED_SELECT}${where}\n  ORDER BY n.ServiceDate DESC`, params);
+  const params = {};
+  if (f.program !== undefined && f.program !== null && f.program !== '') { conds.push(`${alias}.Program = @program`); params.program = parseInt(f.program, 10); }
+  if (f.location !== undefined && f.location !== null && f.location !== '') { conds.push(`${alias}.Location = @location`); params.location = parseInt(f.location, 10); }
+  if (f.from) { conds.push(`${alias}.ServiceDate >= @from`); params.from = f.from; }
+  if (f.to) { conds.push(`${alias}.ServiceDate <= @to`); params.to = f.to; }
+  if (f.status === 'submitted') conds.push(`${alias}.SubmissionStatus IS NOT NULL`);
+  if (f.status === 'saved') conds.push(`${alias}.SubmissionStatus IS NULL`);
+  return { where: conds.length ? 'WHERE ' + conds.join(' AND ') : '', params };
+}
+
+const ACT_SUM = `(ISNULL(n.Library,0)+ISNULL(n.Park,0)+ISNULL(n.Shopping,0)+ISNULL(n.SpecialEvent,0)+ISNULL(n.SportsExercise,0)+ISNULL(n.Walk,0)+ISNULL(n.WorshipService,0)+ISNULL(n.[Other],0))`;
+
+/**
+ * Dashboard metrics for the Residential Notes page, honoring filters.
+ * Activity "engaged" is heuristically value > 0 (encoding to confirm in Explore).
+ */
+export async function residentialNoteMetrics(f = {}) {
+  const { where, params } = residentialWhere(f);
+  // "present" = submitted + not absent (the population that should have activity data)
+  const presentWhere = (where ? where + ' AND ' : 'WHERE ') + 'n.SubmissionStatus IS NOT NULL AND ISNULL(n.IsAbsent,0)=0';
+  const out = {};
+  const run = async (k, sql) => { try { out[k] = await c360Query(sql, params); } catch (e) { out[k] = { error: e.code || e.message }; } };
+
+  await run('status', `SELECT COUNT(*) total,
+    SUM(CASE WHEN n.SubmissionStatus IS NOT NULL THEN 1 ELSE 0 END) documented,
+    SUM(CASE WHEN n.SubmissionStatus IS NULL THEN 1 ELSE 0 END) pending,
+    SUM(CASE WHEN ISNULL(n.IsAbsent,0)=1 THEN 1 ELSE 0 END) absent,
+    SUM(ISNULL(n.Duration,0)) totalMinutes
+    FROM ${NOTE} n ${where}`);
+  await run('timePerDay', `SELECT TOP 60 CAST(n.ServiceDate AS date) day,
+    SUM(ISNULL(n.Duration,0)) minutes, COUNT(*) notes
+    FROM ${NOTE} n ${where} GROUP BY CAST(n.ServiceDate AS date) ORDER BY day DESC`);
+  await run('communityEngagement', `SELECT COUNT(*) notes,
+    SUM(CASE WHEN n.CommunityActivitesOffered_='Offered' THEN 1 ELSE 0 END) offered,
+    SUM(CASE WHEN n.CommunityActivitesOffered_='Not Offered' THEN 1 ELSE 0 END) notOffered,
+    SUM(CASE WHEN ${ACT_SUM}>0 THEN 1 ELSE 0 END) participatedAny,
+    SUM(CASE WHEN n.Library>0 THEN 1 ELSE 0 END) library, SUM(CASE WHEN n.Park>0 THEN 1 ELSE 0 END) park,
+    SUM(CASE WHEN n.Shopping>0 THEN 1 ELSE 0 END) shopping, SUM(CASE WHEN n.SpecialEvent>0 THEN 1 ELSE 0 END) specialEvent,
+    SUM(CASE WHEN n.SportsExercise>0 THEN 1 ELSE 0 END) sportsExercise, SUM(CASE WHEN n.Walk>0 THEN 1 ELSE 0 END) walk,
+    SUM(CASE WHEN n.WorshipService>0 THEN 1 ELSE 0 END) worship, SUM(CASE WHEN n.[Other]>0 THEN 1 ELSE 0 END) other
+    FROM ${NOTE} n ${presentWhere}`);
+  await run('dayLivingActivities', `SELECT COUNT(*) notes,
+    SUM(CASE WHEN n.ActivitiesofDailyLiving>0 THEN 1 ELSE 0 END) adlAddressed,
+    SUM(CASE WHEN n.Appointment>0 THEN 1 ELSE 0 END) appointment
+    FROM ${NOTE} n ${presentWhere}`);
+  await run('homeEntertainment', `SELECT COUNT(*) notes,
+    SUM(CASE WHEN n.InHomeActivities>0 THEN 1 ELSE 0 END) inHomeAny,
+    SUM(CASE WHEN n.Games>0 THEN 1 ELSE 0 END) games, SUM(CASE WHEN n.Movie>0 THEN 1 ELSE 0 END) movie,
+    SUM(CASE WHEN n.CookingBaking>0 THEN 1 ELSE 0 END) cookingBaking,
+    SUM(CASE WHEN n.OutdoorActivities>0 THEN 1 ELSE 0 END) outdoor
+    FROM ${NOTE} n ${presentWhere}`);
+  return out;
+}
+
+/** Distinct Program / Location ids present (for filter dropdowns). State pending location-dim mapping. */
+export async function residentialFilterOptions() {
+  const programs = await c360Query(`SELECT DISTINCT TOP 200 Program FROM ${NOTE} WHERE Program IS NOT NULL ORDER BY Program`).catch(() => []);
+  const locations = await c360Query(`SELECT DISTINCT TOP 500 Location FROM ${NOTE} WHERE Location IS NOT NULL ORDER BY Location`).catch(() => []);
+  return { programs: programs.map((r) => r.Program), locations: locations.map((r) => r.Location) };
+}
+
+/** Full structured detail for ONE note (de-identified; NO free-text narrative — PHI). */
+export async function getResidentialNoteDetail(noteId) {
+  const rows = await c360Query(`SELECT TOP 1
+    n.BSL_ResidentialServiceNoteID AS NoteId, ${INITIALS} AS ClientInitials,
+    n.Program, n.Location, n.ServiceName, n.ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio,
+    n.CreatedBy_ AS ChartedByName, n.CreatedOn, n.LastModifiedBy_ AS LastModifiedByName, n.LastModifiedOn,
+    n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
+    CASE WHEN n.SubmissionStatus IS NULL THEN 'Saved' ELSE 'Submitted' END AS NoteState, n.IsAbsent,
+    n.CommunityActivitesOffered_ AS CommunityServicesOffered,
+    n.Library, n.Park, n.Shopping, n.SpecialEvent, n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
+    n.ActivitiesofDailyLiving, n.Appointment,
+    n.InHomeActivities, n.Games, n.Movie, n.CookingBaking, n.OutdoorActivities
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID
+    WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
+  return rows[0] || null;
 }
 
 /**

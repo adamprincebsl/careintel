@@ -11,6 +11,7 @@ import AdminRoles from './pages/AdminRoles';
 import AdminAudit from './pages/AdminAudit';
 import C360Reports from './pages/C360Reports';
 import C360Explore from './pages/C360Explore';
+import ResidentialNotes from './pages/ResidentialNotes';
 
 export default function App() {
   const { loading, error, user } = useAuth();
@@ -51,6 +52,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/assistant" element={<Assistant />} />
           <Route path="/c360" element={<C360Reports />} />
+          <Route path="/c360/residential" element={<ResidentialNotes />} />
           <Route path="/c360/explore" element={<C360Explore />} />
           <Route path="/clients" element={<ClientDetail />} />
           <Route path="/admin/users" element={<AdminUsers />} />
