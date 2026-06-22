@@ -77,6 +77,10 @@ const STAFF_JOINS = `
 const CHARTED_BY = "COALESCE(NULLIF(LTRIM(n.CreatedBy_),''), NULLIF(LTRIM(CONCAT(su.FirstName,' ',su.LastName)),''))";
 const MODIFIED_BY = "COALESCE(NULLIF(LTRIM(n.LastModifiedBy_),''), NULLIF(LTRIM(CONCAT(sm.FirstName,' ',sm.LastName)),''))";
 
+// Note state (validated rule): Submitted (SubmissionStatus set) > Saved (touched,
+// has a LastModifiedOn) > Pending (never modified).
+const NOTE_STATE = "CASE WHEN n.SubmissionStatus IS NOT NULL THEN 'Submitted' WHEN n.LastModifiedOn IS NOT NULL THEN 'Saved' ELSE 'Pending' END";
+
 // SELECT list for the de-identified structured residential-note view.
 //
 // VALIDATED mapping (against live data, 58,025 rows) + domain rules:
@@ -104,7 +108,7 @@ const STRUCTURED_SELECT = `
     ${MODIFIED_BY}     AS LastModifiedByName,
     n.LastModifiedOn,
     n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
-    CASE WHEN n.SubmissionStatus IS NULL THEN 'Saved' ELSE 'Submitted' END AS NoteState,
+    ${NOTE_STATE} AS NoteState,
     n.IsAbsent,
     n.CommunityActivitesOffered_         AS CommunityServicesOffered,
     n.Library, n.Park, n.Shopping, n.SpecialEvent,
@@ -142,7 +146,8 @@ function residentialWhere(f = {}, alias = 'n') {
   if (f.to) { conds.push(`${alias}.ServiceDate <= @to`); params.to = f.to; }
   if (f.client !== undefined && f.client !== null && f.client !== '') { conds.push(`${alias}.ClientID = @client`); params.client = parseInt(f.client, 10); }
   if (f.status === 'submitted') conds.push(`${alias}.SubmissionStatus IS NOT NULL`);
-  if (f.status === 'saved') conds.push(`${alias}.SubmissionStatus IS NULL`);
+  if (f.status === 'saved') conds.push(`${alias}.SubmissionStatus IS NULL AND ${alias}.LastModifiedOn IS NOT NULL`);
+  if (f.status === 'pending') conds.push(`${alias}.SubmissionStatus IS NULL AND ${alias}.LastModifiedOn IS NULL`);
   // Scheduled (system-generated, CreatedBy blank) vs Adhoc (a staffer created it).
   if (f.chartType === 'scheduled') conds.push(`${alias}.CreatedBy IS NULL`);
   if (f.chartType === 'adhoc') conds.push(`${alias}.CreatedBy IS NOT NULL`);
@@ -163,8 +168,9 @@ export async function residentialNoteMetrics(f = {}) {
   const run = async (k, sql) => { try { out[k] = await c360Query(sql, params); } catch (e) { out[k] = { error: e.code || e.message }; } };
 
   await run('status', `SELECT COUNT(*) total,
-    SUM(CASE WHEN n.SubmissionStatus IS NOT NULL THEN 1 ELSE 0 END) documented,
-    SUM(CASE WHEN n.SubmissionStatus IS NULL THEN 1 ELSE 0 END) pending,
+    SUM(CASE WHEN n.SubmissionStatus IS NOT NULL THEN 1 ELSE 0 END) submitted,
+    SUM(CASE WHEN n.SubmissionStatus IS NULL AND n.LastModifiedOn IS NOT NULL THEN 1 ELSE 0 END) saved,
+    SUM(CASE WHEN n.SubmissionStatus IS NULL AND n.LastModifiedOn IS NULL THEN 1 ELSE 0 END) pending,
     SUM(CASE WHEN ISNULL(n.IsAbsent,0)=1 THEN 1 ELSE 0 END) absent,
     SUM(ISNULL(n.Duration,0)) totalMinutes
     FROM ${NOTE} n ${where}`);
@@ -195,9 +201,14 @@ export async function residentialNoteMetrics(f = {}) {
 
 /** Distinct Program / Location ids present (for filter dropdowns). State pending location-dim mapping. */
 export async function residentialFilterOptions() {
-  const programs = await c360Query(`SELECT DISTINCT TOP 200 Program FROM ${NOTE} WHERE Program IS NOT NULL ORDER BY Program`).catch(() => []);
-  const locations = await c360Query(`SELECT DISTINCT TOP 500 Location FROM ${NOTE} WHERE Location IS NOT NULL ORDER BY Location`).catch(() => []);
-  return { programs: programs.map((r) => r.Program), locations: locations.map((r) => r.Location) };
+  const programs = await c360Query(`SELECT DISTINCT TOP 300 n.Program id, pr.Program name
+    FROM ${NOTE} n LEFT JOIN dbo.s_Program pr ON n.Program = pr.ProgramID
+    WHERE n.Program IS NOT NULL ORDER BY pr.Program`).catch(() => []);
+  const locations = await c360Query(`SELECT DISTINCT TOP 800 n.Location id, loc.LocationName name
+    FROM ${NOTE} n LEFT JOIN dbo.s_Locations loc ON n.Location = loc.LocationID
+    WHERE n.Location IS NOT NULL ORDER BY loc.LocationName`).catch(() => []);
+  const m = (r) => ({ id: r.id, name: r.name || String(r.id) });
+  return { programs: programs.map(m), locations: locations.map(m) };
 }
 
 /** Full structured detail for ONE note (de-identified; NO free-text narrative — PHI). */
@@ -209,7 +220,7 @@ export async function getResidentialNoteDetail(noteId) {
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     ${CHARTED_BY} AS ChartedByName, n.CreatedOn, ${MODIFIED_BY} AS LastModifiedByName, n.LastModifiedOn,
     n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
-    CASE WHEN n.SubmissionStatus IS NULL THEN 'Saved' ELSE 'Submitted' END AS NoteState, n.IsAbsent,
+    ${NOTE_STATE} AS NoteState, n.IsAbsent,
     n.CommunityActivitesOffered_ AS CommunityServicesOffered,
     n.Library, n.Park, n.Shopping, n.SpecialEvent, n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
     n.ActivitiesofDailyLiving, n.Appointment,
@@ -228,6 +239,7 @@ export async function getResidentialNoteDetail(noteId) {
 export async function getResidentialNoteIdentified(noteId) {
   const rows = await c360Query(`SELECT TOP 1 n.*,
     ss.UDDescription AS SubmissionStatusLabel,
+    ${NOTE_STATE} AS NoteState,
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName,
     cl.BirthDate AS ClientBirthDate, cl.Sex_ AS ClientGenderText,

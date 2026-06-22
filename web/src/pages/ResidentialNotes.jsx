@@ -75,12 +75,16 @@ export default function ResidentialNotes() {
       {/* Filters */}
       <form onSubmit={apply} className="flex flex-wrap items-end gap-3 rounded border border-border bg-white p-3 shadow-sm">
         <label className="text-xs text-ink-muted">Program
-          <input list="programs" value={f.program} onChange={(e) => setF({ ...f, program: e.target.value })} className="mt-1 block w-28 rounded border border-border px-2 py-1 text-sm outline-none focus:border-beacon" />
-          <datalist id="programs">{(opts?.programs || []).map((p) => <option key={p} value={p} />)}</datalist>
+          <select value={f.program} onChange={(e) => setF({ ...f, program: e.target.value })} className="mt-1 block w-48 rounded border border-border px-2 py-1 text-sm outline-none focus:border-beacon">
+            <option value="">All programs</option>
+            {(opts?.programs || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
         </label>
         <label className="text-xs text-ink-muted">Location
-          <input list="locations" value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} className="mt-1 block w-28 rounded border border-border px-2 py-1 text-sm outline-none focus:border-beacon" />
-          <datalist id="locations">{(opts?.locations || []).map((l) => <option key={l} value={l} />)}</datalist>
+          <select value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} className="mt-1 block w-48 rounded border border-border px-2 py-1 text-sm outline-none focus:border-beacon">
+            <option value="">All locations</option>
+            {(opts?.locations || []).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
         </label>
         <label className="text-xs text-ink-muted">From
           <input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className="mt-1 block rounded border border-border px-2 py-1 text-sm outline-none focus:border-beacon" />
@@ -91,8 +95,9 @@ export default function ResidentialNotes() {
         <label className="text-xs text-ink-muted">Status
           <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className="mt-1 block rounded border border-border px-2 py-1 text-sm outline-none focus:border-beacon">
             <option value="">All</option>
-            <option value="submitted">Submitted (documented)</option>
-            <option value="saved">Saved (pending)</option>
+            <option value="submitted">Submitted</option>
+            <option value="saved">Saved (touched)</option>
+            <option value="pending">Pending (untouched)</option>
           </select>
         </label>
         <button type="submit" className="rounded bg-beacon px-4 py-1.5 text-sm font-medium text-white hover:bg-beacon-dark">Apply</button>
@@ -103,11 +108,12 @@ export default function ResidentialNotes() {
       {(mFetch || lFetch) && <p className="text-sm text-ink-muted">Loading…</p>}
 
       {/* KPIs */}
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-6">
         <Kpi label="Total notes" value={s.total} />
-        <Kpi label="Documented" value={s.documented} tone="success" sub="Submitted" />
-        <Kpi label="Pending" value={s.pending} tone="gold" sub="Saved, not submitted" />
-        <Kpi label="Absent" value={s.absent} tone="danger" />
+        <Kpi label="Submitted" value={s.submitted} tone="success" />
+        <Kpi label="Saved" value={s.saved} tone="gold" sub="touched, not submitted" />
+        <Kpi label="Pending" value={s.pending} tone="danger" sub="never modified" />
+        <Kpi label="Absent" value={s.absent} />
         <Kpi label="Hours charted" value={s.totalMinutes != null ? Math.round(s.totalMinutes / 60) : '—'} />
       </section>
 
