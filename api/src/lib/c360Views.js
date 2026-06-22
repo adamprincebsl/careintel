@@ -62,6 +62,13 @@ const CLIENT = 'dbo.c_Client';
 const CLIENT_JOIN = `LEFT JOIN ${CLIENT} cl ON n.ClientID = cl.ClientID`;
 const INITIALS = "UPPER(LEFT(LTRIM(cl.FirstName),1)) + '.' + UPPER(LEFT(LTRIM(cl.LastName),1)) + '.'";
 
+// Resolve Program/Location ids → names + State via the dimension tables.
+const DIM_JOINS = `
+  LEFT JOIN dbo.s_Program pr ON n.Program = pr.ProgramID
+  LEFT JOIN dbo.s_ProgramType pt ON pr.ProgramTypeID = pt.ProgramTypeID
+  LEFT JOIN dbo.s_Locations loc ON n.Location = loc.LocationID`;
+const DIM_COLS = `pr.Program AS ProgramName, pt.ProgramType AS ProgramType, loc.LocationName AS LocationName, loc.State AS State`;
+
 // SELECT list for the de-identified structured residential-note view.
 //
 // VALIDATED mapping (against live data, 58,025 rows) + domain rules:
@@ -81,6 +88,7 @@ const STRUCTURED_SELECT = `
     n.ClientID                     AS ClientId,
     ${INITIALS}                    AS ClientInitials,
     n.Program, n.Location, n.ServiceName, n.ServiceDate, n.Duration, n.InRatio,
+    ${DIM_COLS},
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     n.CreatedBy        AS ChartedByStaffId,
     n.CreatedBy_       AS ChartedByName,
@@ -96,7 +104,8 @@ const STRUCTURED_SELECT = `
     n.Appointment, n.ActivitiesofDailyLiving, n.InHomeActivities
   FROM ${NOTE} n
   LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID
-  ${CLIENT_JOIN}`;
+  ${CLIENT_JOIN}
+  ${DIM_JOINS}`;
 
 /**
  * Query de-identified structured residential notes.
@@ -187,6 +196,7 @@ export async function getResidentialNoteDetail(noteId) {
   const rows = await c360Query(`SELECT TOP 1
     n.BSL_ResidentialServiceNoteID AS NoteId, n.ClientID AS ClientId, ${INITIALS} AS ClientInitials,
     n.Program, n.Location, n.ServiceName, n.ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio,
+    ${DIM_COLS},
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     n.CreatedBy_ AS ChartedByName, n.CreatedOn, n.LastModifiedBy_ AS LastModifiedByName, n.LastModifiedOn,
     n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
@@ -195,7 +205,7 @@ export async function getResidentialNoteDetail(noteId) {
     n.Library, n.Park, n.Shopping, n.SpecialEvent, n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
     n.ActivitiesofDailyLiving, n.Appointment,
     n.InHomeActivities, n.Games, n.Movie, n.CookingBaking, n.OutdoorActivities
-    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN}
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;
 }
@@ -211,8 +221,9 @@ export async function getResidentialNoteIdentified(noteId) {
     ss.UDDescription AS SubmissionStatusLabel,
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName,
-    cl.BirthDate AS ClientBirthDate, cl.Sex_ AS ClientGenderText
-    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN}
+    cl.BirthDate AS ClientBirthDate, cl.Sex_ AS ClientGenderText,
+    ${DIM_COLS}
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;
 }

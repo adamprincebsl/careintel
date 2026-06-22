@@ -7,7 +7,9 @@ const LABELS = {
   ClientId: 'Client ID', ClientInitials: 'Client', FirstName: 'First name', LastName: 'Last name',
   ClientDOB: 'Date of birth', ClientGender: 'Gender',
   ClientFirstName: 'First name', ClientLastName: 'Last name', ClientBirthDate: 'Date of birth', ClientGenderText: 'Gender',
-  ServiceName: 'Service', Program: 'Program', Location: 'Location', ServiceDate: 'Service date',
+  ServiceName: 'Service', Program: 'Program (id)', Location: 'Location (id)',
+  ProgramName: 'Program', ProgramType: 'Program type', LocationName: 'Location', State: 'State',
+  ServiceDate: 'Service date',
   ServiceStartTime: 'Start', ServiceEndTime: 'End', Duration: 'Duration (min)', InRatio: 'In ratio', IsAbsent: 'Client absent',
   NoteState: 'Note state', SubmissionStatusLabel: 'Submission status', ChartType: 'Chart type',
   ChartedByName: 'Charted by', CreatedBy_: 'Charted by', CreatedOn: 'Charted on',
@@ -28,7 +30,7 @@ const LABELS = {
 
 const SECTIONS = [
   { title: 'Client', keys: ['ClientInitials', 'ClientId', 'ClientFirstName', 'ClientLastName', 'ClientBirthDate', 'ClientGenderText'] },
-  { title: 'Service', keys: ['ServiceName', 'Program', 'Location', 'ServiceDate', 'ServiceStartTime', 'ServiceEndTime', 'Duration', 'InRatio', 'IsAbsent'] },
+  { title: 'Service', keys: ['ServiceName', 'ProgramName', 'ProgramType', 'LocationName', 'State', 'ServiceDate', 'ServiceStartTime', 'ServiceEndTime', 'Duration', 'InRatio', 'IsAbsent'] },
   { title: 'Status', keys: ['NoteState', 'SubmissionStatusLabel', 'ChartType'] },
   { title: 'Community Engagement', keys: ['CommunityServicesOffered', 'CommunityActivitesOffered_', 'Library', 'Park', 'Shopping', 'SpecialEvent', 'SportsExercise', 'Walk', 'WorshipService', 'Other', 'CommunityActivities'] },
   { title: 'Day Living (ADLs)', keys: ['ActivitiesofDailyLiving', 'ResponsetoADL', 'Appointment', 'AppointmentResponse'] },

@@ -157,14 +157,15 @@ export default function ResidentialNotes() {
       <section className="overflow-x-auto rounded border border-border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-surface text-left text-xs uppercase text-ink-muted">
-            <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Program</th><th className="px-3 py-2">State</th><th className="px-3 py-2">Charted by</th><th className="px-3 py-2">Min</th><th className="px-3 py-2"></th></tr>
+            <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Program</th><th className="px-3 py-2">State</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Charted by</th><th className="px-3 py-2">Min</th><th className="px-3 py-2"></th></tr>
           </thead>
           <tbody>
             {(list?.rows || []).map((r) => (
               <tr key={r.NoteId} className="border-t border-border hover:bg-surface">
                 <td className="px-3 py-1.5">{r.ServiceDate ? String(r.ServiceDate).slice(0, 10) : '—'}</td>
                 <td className="px-3 py-1.5">{r.ClientInitials}</td>
-                <td className="px-3 py-1.5">{r.Program ?? '—'}</td>
+                <td className="px-3 py-1.5">{r.ProgramName || r.Program || '—'}</td>
+                <td className="px-3 py-1.5">{r.State || '—'}</td>
                 <td className="px-3 py-1.5">
                   <span className={`rounded px-1.5 py-0.5 text-[11px] ${r.NoteState === 'Submitted' ? 'bg-success/10 text-success' : 'bg-gold-tint text-gold-dark'}`}>{r.NoteState}</span>
                 </td>
@@ -173,7 +174,7 @@ export default function ResidentialNotes() {
                 <td className="px-3 py-1.5 text-right"><button onClick={() => setSelected(r.NoteId)} className="text-beacon hover:underline">view</button></td>
               </tr>
             ))}
-            {list && !list.rows?.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={7}>No notes for these filters.</td></tr>}
+            {list && !list.rows?.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={8}>No notes for these filters.</td></tr>}
           </tbody>
         </table>
       </section>
