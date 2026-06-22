@@ -69,6 +69,14 @@ const DIM_JOINS = `
   LEFT JOIN dbo.s_Locations loc ON n.Location = loc.LocationID`;
 const DIM_COLS = `pr.Program AS ProgramName, pt.ProgramType AS ProgramType, loc.LocationName AS LocationName, loc.State AS State`;
 
+// Resolve charting/modifying staff from s_User — the note's CreatedBy_/LastModifiedBy_
+// name twins are often blank; fall back to the user master.
+const STAFF_JOINS = `
+  LEFT JOIN dbo.s_User su ON n.CreatedBy = su.UserID
+  LEFT JOIN dbo.s_User sm ON n.LastModifiedBy = sm.UserID`;
+const CHARTED_BY = "COALESCE(NULLIF(LTRIM(n.CreatedBy_),''), NULLIF(LTRIM(CONCAT(su.FirstName,' ',su.LastName)),''))";
+const MODIFIED_BY = "COALESCE(NULLIF(LTRIM(n.LastModifiedBy_),''), NULLIF(LTRIM(CONCAT(sm.FirstName,' ',sm.LastName)),''))";
+
 // SELECT list for the de-identified structured residential-note view.
 //
 // VALIDATED mapping (against live data, 58,025 rows) + domain rules:
@@ -91,9 +99,9 @@ const STRUCTURED_SELECT = `
     ${DIM_COLS},
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     n.CreatedBy        AS ChartedByStaffId,
-    n.CreatedBy_       AS ChartedByName,
+    ${CHARTED_BY}      AS ChartedByName,
     n.CreatedOn        AS ChartedOn,
-    n.LastModifiedBy_  AS LastModifiedByName,
+    ${MODIFIED_BY}     AS LastModifiedByName,
     n.LastModifiedOn,
     n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
     CASE WHEN n.SubmissionStatus IS NULL THEN 'Saved' ELSE 'Submitted' END AS NoteState,
@@ -105,7 +113,8 @@ const STRUCTURED_SELECT = `
   FROM ${NOTE} n
   LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID
   ${CLIENT_JOIN}
-  ${DIM_JOINS}`;
+  ${DIM_JOINS}
+  ${STAFF_JOINS}`;
 
 /**
  * Query de-identified structured residential notes.
@@ -198,14 +207,14 @@ export async function getResidentialNoteDetail(noteId) {
     n.Program, n.Location, n.ServiceName, n.ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio,
     ${DIM_COLS},
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
-    n.CreatedBy_ AS ChartedByName, n.CreatedOn, n.LastModifiedBy_ AS LastModifiedByName, n.LastModifiedOn,
+    ${CHARTED_BY} AS ChartedByName, n.CreatedOn, ${MODIFIED_BY} AS LastModifiedByName, n.LastModifiedOn,
     n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
     CASE WHEN n.SubmissionStatus IS NULL THEN 'Saved' ELSE 'Submitted' END AS NoteState, n.IsAbsent,
     n.CommunityActivitesOffered_ AS CommunityServicesOffered,
     n.Library, n.Park, n.Shopping, n.SpecialEvent, n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
     n.ActivitiesofDailyLiving, n.Appointment,
     n.InHomeActivities, n.Games, n.Movie, n.CookingBaking, n.OutdoorActivities
-    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS}
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS} ${STAFF_JOINS}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;
 }
@@ -222,8 +231,9 @@ export async function getResidentialNoteIdentified(noteId) {
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName,
     cl.BirthDate AS ClientBirthDate, cl.Sex_ AS ClientGenderText,
-    ${DIM_COLS}
-    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS}
+    ${DIM_COLS},
+    ${CHARTED_BY} AS ChartedByName, ${MODIFIED_BY} AS LastModifiedByName
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS} ${STAFF_JOINS}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;
 }

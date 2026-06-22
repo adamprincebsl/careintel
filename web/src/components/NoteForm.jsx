@@ -37,7 +37,7 @@ const SECTIONS = [
   { title: 'Home Activities', keys: ['InHomeActivities', 'InHomeActivities_', 'InHomeActivityResponse', 'Games', 'Movie', 'CookingBaking', 'OutdoorActivities', 'OtherInHomeActivity', 'OtherInHomeActivityDetail'] },
   { title: 'Carve-out', onlyIfPresent: true, keys: ['CarveOut', 'CarveStartTime', 'CarveEndTime', 'CarveOutReason', 'OtherCarveReasonDetail', 'CarveOut1', 'CarveStartTime1', 'CarveEndTime1', 'CarveOutReason1', 'OtherCarveReasonDetail1', 'CarveOut2', 'CarveStartTime2', 'CarveEndTime2', 'CarveOutReason2', 'OtherCarveReasonDetail2'] },
   { title: 'Summary', keys: ['DetailedSummaryNote', 'IndividualSurveyResponse'] },
-  { title: 'Authorship', keys: ['ChartedByName', 'CreatedBy_', 'CreatedOn', 'LastModifiedByName', 'LastModifiedBy_', 'LastModifiedOn'] }
+  { title: 'Authorship', keys: ['ChartedByName', 'CreatedOn', 'LastModifiedByName', 'LastModifiedOn'] }
 ];
 
 const LONG = new Set(['DetailedSummaryNote', 'CommunityActivities', 'ResponsetoADL', 'AppointmentResponse', 'OtherInHomeActivityDetail', 'InHomeActivityResponse', 'IndividualSurveyResponse', 'OtherCarveReasonDetail', 'OtherCarveReasonDetail1', 'OtherCarveReasonDetail2']);
