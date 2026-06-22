@@ -56,7 +56,11 @@ export async function profileNote(table) {
   }
   return out;
 }
-const INITIALS = "UPPER(LEFT(LTRIM(n.FirstName),1)) + '.' + UPPER(LEFT(LTRIM(n.LastName),1)) + '.'";
+// Initials come from the CLIENT master (c_Client) — the note's own FirstName/
+// LastName are frequently blank (esp. scheduled-origin notes).
+const CLIENT = 'dbo.c_Client';
+const CLIENT_JOIN = `LEFT JOIN ${CLIENT} cl ON n.ClientID = cl.ClientID`;
+const INITIALS = "UPPER(LEFT(LTRIM(cl.FirstName),1)) + '.' + UPPER(LEFT(LTRIM(cl.LastName),1)) + '.'";
 
 // SELECT list for the de-identified structured residential-note view.
 //
@@ -91,7 +95,8 @@ const STRUCTURED_SELECT = `
     n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
     n.Appointment, n.ActivitiesofDailyLiving, n.InHomeActivities
   FROM ${NOTE} n
-  LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID`;
+  LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID
+  ${CLIENT_JOIN}`;
 
 /**
  * Query de-identified structured residential notes.
@@ -190,7 +195,7 @@ export async function getResidentialNoteDetail(noteId) {
     n.Library, n.Park, n.Shopping, n.SpecialEvent, n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
     n.ActivitiesofDailyLiving, n.Appointment,
     n.InHomeActivities, n.Games, n.Movie, n.CookingBaking, n.OutdoorActivities
-    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;
 }
@@ -204,8 +209,10 @@ export async function getResidentialNoteDetail(noteId) {
 export async function getResidentialNoteIdentified(noteId) {
   const rows = await c360Query(`SELECT TOP 1 n.*,
     ss.UDDescription AS SubmissionStatusLabel,
-    CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType
-    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID
+    CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
+    cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName,
+    cl.BirthDate AS ClientBirthDate, cl.Sex_ AS ClientGenderText
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;
 }
