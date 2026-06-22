@@ -81,6 +81,12 @@ const MODIFIED_BY = "COALESCE(NULLIF(LTRIM(n.LastModifiedBy_),''), NULLIF(LTRIM(
 // has a LastModifiedOn) > Pending (never modified).
 const NOTE_STATE = "CASE WHEN n.SubmissionStatus IS NOT NULL THEN 'Submitted' WHEN n.LastModifiedOn IS NOT NULL THEN 'Saved' ELSE 'Pending' END";
 
+// Real service date: ServiceDate is unreliable on many notes; the service window
+// (ServiceStartTime) carries the true date.
+const SERVICE_DATE = "CAST(COALESCE(n.ServiceStartTime, n.ServiceDate) AS date)";
+// Resolve a UDID-coded column to its UDO description (activity flags hold UDIDs).
+const udo = (col) => `(SELECT TOP 1 UDDescription FROM ${UDO} WHERE UDID = n.[${col}])`;
+
 // SELECT list for the de-identified structured residential-note view.
 //
 // VALIDATED mapping (against live data, 58,025 rows) + domain rules:
@@ -99,7 +105,7 @@ const STRUCTURED_SELECT = `
     n.BSL_ResidentialServiceNoteID AS NoteId,
     n.ClientID                     AS ClientId,
     ${INITIALS}                    AS ClientInitials,
-    n.Program, n.Location, n.ServiceName, n.ServiceDate, n.Duration, n.InRatio,
+    n.Program, n.Location, n.ServiceName, ${SERVICE_DATE} AS ServiceDate, n.Duration, n.InRatio,
     ${DIM_COLS},
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     n.CreatedBy        AS ChartedByStaffId,
@@ -142,8 +148,8 @@ function residentialWhere(f = {}, alias = 'n') {
   const params = {};
   if (f.program !== undefined && f.program !== null && f.program !== '') { conds.push(`${alias}.Program = @program`); params.program = parseInt(f.program, 10); }
   if (f.location !== undefined && f.location !== null && f.location !== '') { conds.push(`${alias}.Location = @location`); params.location = parseInt(f.location, 10); }
-  if (f.from) { conds.push(`${alias}.ServiceDate >= @from`); params.from = f.from; }
-  if (f.to) { conds.push(`${alias}.ServiceDate <= @to`); params.to = f.to; }
+  if (f.from) { conds.push(`COALESCE(${alias}.ServiceStartTime, ${alias}.ServiceDate) >= @from`); params.from = f.from; }
+  if (f.to) { conds.push(`COALESCE(${alias}.ServiceStartTime, ${alias}.ServiceDate) <= @to`); params.to = f.to; }
   if (f.client !== undefined && f.client !== null && f.client !== '') { conds.push(`${alias}.ClientID = @client`); params.client = parseInt(f.client, 10); }
   if (f.status === 'submitted') conds.push(`${alias}.SubmissionStatus IS NOT NULL`);
   if (f.status === 'saved') conds.push(`${alias}.SubmissionStatus IS NULL AND ${alias}.LastModifiedOn IS NOT NULL`);
@@ -174,9 +180,9 @@ export async function residentialNoteMetrics(f = {}) {
     SUM(CASE WHEN ISNULL(n.IsAbsent,0)=1 THEN 1 ELSE 0 END) absent,
     SUM(ISNULL(n.Duration,0)) totalMinutes
     FROM ${NOTE} n ${where}`);
-  await run('timePerDay', `SELECT TOP 60 CAST(n.ServiceDate AS date) day,
+  await run('timePerDay', `SELECT TOP 60 ${SERVICE_DATE} day,
     SUM(ISNULL(n.Duration,0)) minutes, COUNT(*) notes
-    FROM ${NOTE} n ${where} GROUP BY CAST(n.ServiceDate AS date) ORDER BY day DESC`);
+    FROM ${NOTE} n ${where} GROUP BY ${SERVICE_DATE} ORDER BY day DESC`);
   await run('communityEngagement', `SELECT COUNT(*) notes,
     SUM(CASE WHEN n.CommunityActivitesOffered_='Offered' THEN 1 ELSE 0 END) offered,
     SUM(CASE WHEN n.CommunityActivitesOffered_='Not Offered' THEN 1 ELSE 0 END) notOffered,
@@ -215,16 +221,18 @@ export async function residentialFilterOptions() {
 export async function getResidentialNoteDetail(noteId) {
   const rows = await c360Query(`SELECT TOP 1
     n.BSL_ResidentialServiceNoteID AS NoteId, n.ClientID AS ClientId, ${INITIALS} AS ClientInitials,
-    n.Program, n.Location, n.ServiceName, n.ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio,
-    ${DIM_COLS},
+    n.ServiceName, ${DIM_COLS},
+    ${SERVICE_DATE} AS ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio, n.IsAbsent,
     CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     ${CHARTED_BY} AS ChartedByName, n.CreatedOn, ${MODIFIED_BY} AS LastModifiedByName, n.LastModifiedOn,
-    n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
-    ${NOTE_STATE} AS NoteState, n.IsAbsent,
+    n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel, ${NOTE_STATE} AS NoteState,
     n.CommunityActivitesOffered_ AS CommunityServicesOffered,
-    n.Library, n.Park, n.Shopping, n.SpecialEvent, n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
-    n.ActivitiesofDailyLiving, n.Appointment,
-    n.InHomeActivities, n.Games, n.Movie, n.CookingBaking, n.OutdoorActivities
+    ${udo('Library')} AS Library, ${udo('Park')} AS Park, ${udo('Shopping')} AS Shopping,
+    ${udo('SpecialEvent')} AS SpecialEvent, ${udo('SportsExercise')} AS SportsExercise, ${udo('Walk')} AS Walk,
+    ${udo('WorshipService')} AS WorshipService, ${udo('Other')} AS [Other],
+    ${udo('ActivitiesofDailyLiving')} AS ActivitiesofDailyLiving, ${udo('Appointment')} AS Appointment,
+    n.InHomeActivities_ AS InHomeActivities, ${udo('Games')} AS Games, ${udo('Movie')} AS Movie,
+    ${udo('CookingBaking')} AS CookingBaking, ${udo('OutdoorActivities')} AS OutdoorActivities
     FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS} ${STAFF_JOINS}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;
@@ -237,14 +245,27 @@ export async function getResidentialNoteDetail(noteId) {
  * + resolved status label + ChartType. Returns Program for the scope check.
  */
 export async function getResidentialNoteIdentified(noteId) {
-  const rows = await c360Query(`SELECT TOP 1 n.*,
-    ss.UDDescription AS SubmissionStatusLabel,
-    ${NOTE_STATE} AS NoteState,
-    CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
-    cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName,
-    cl.BirthDate AS ClientBirthDate, cl.Sex_ AS ClientGenderText,
-    ${DIM_COLS},
-    ${CHARTED_BY} AS ChartedByName, ${MODIFIED_BY} AS LastModifiedByName
+  const rows = await c360Query(`SELECT TOP 1
+    n.BSL_ResidentialServiceNoteID AS NoteId, n.ClientID AS ClientId,
+    cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName, cl.BirthDate AS ClientBirthDate,
+    COALESCE(NULLIF(cl.Sex_,''), (SELECT TOP 1 UDDescription FROM ${UDO} WHERE UDID = cl.Gender)) AS ClientGenderText,
+    n.ServiceName, ${DIM_COLS},
+    ${SERVICE_DATE} AS ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio, n.IsAbsent,
+    n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel, ${NOTE_STATE} AS NoteState,
+    CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType, n.IsProcessed,
+    n.CommunityActivitesOffered_ AS CommunityServicesOffered,
+    ${udo('Library')} AS Library, ${udo('Park')} AS Park, ${udo('Shopping')} AS Shopping,
+    ${udo('SpecialEvent')} AS SpecialEvent, ${udo('SportsExercise')} AS SportsExercise, ${udo('Walk')} AS Walk,
+    ${udo('WorshipService')} AS WorshipService, ${udo('Other')} AS [Other], n.CommunityActivities,
+    ${udo('ActivitiesofDailyLiving')} AS ActivitiesofDailyLiving, n.ResponsetoADL,
+    ${udo('Appointment')} AS Appointment, n.AppointmentResponse,
+    n.InHomeActivities_ AS InHomeActivities, ${udo('Games')} AS Games, ${udo('Movie')} AS Movie,
+    ${udo('CookingBaking')} AS CookingBaking, ${udo('OutdoorActivities')} AS OutdoorActivities,
+    n.OtherInHomeActivityDetail, n.InHomeActivityResponse,
+    n.CarveOut, n.CarveStartTime, n.CarveEndTime, ${udo('CarveOutReason')} AS CarveOutReason, n.OtherCarveReasonDetail,
+    n.CarveOut1, n.CarveStartTime1, n.CarveEndTime1, n.CarveOut2, n.CarveStartTime2, n.CarveEndTime2,
+    n.DetailedSummaryNote, ${udo('IndividualSurveyResponse')} AS IndividualSurveyResponse,
+    ${CHARTED_BY} AS ChartedByName, n.CreatedOn, ${MODIFIED_BY} AS LastModifiedByName, n.LastModifiedOn
     FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID ${CLIENT_JOIN} ${DIM_JOINS} ${STAFF_JOINS}
     WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
   return rows[0] || null;

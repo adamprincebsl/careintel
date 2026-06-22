@@ -34,7 +34,7 @@ const SECTIONS = [
   { title: 'Status', keys: ['NoteState', 'SubmissionStatusLabel', 'ChartType'] },
   { title: 'Community Engagement', keys: ['CommunityServicesOffered', 'CommunityActivitesOffered_', 'Library', 'Park', 'Shopping', 'SpecialEvent', 'SportsExercise', 'Walk', 'WorshipService', 'Other', 'CommunityActivities'] },
   { title: 'Day Living (ADLs)', keys: ['ActivitiesofDailyLiving', 'ResponsetoADL', 'Appointment', 'AppointmentResponse'] },
-  { title: 'Home Activities', keys: ['InHomeActivities', 'InHomeActivities_', 'InHomeActivityResponse', 'Games', 'Movie', 'CookingBaking', 'OutdoorActivities', 'OtherInHomeActivity', 'OtherInHomeActivityDetail'] },
+  { title: 'Home Activities', keys: ['InHomeActivities', 'Games', 'Movie', 'CookingBaking', 'OutdoorActivities', 'OtherInHomeActivity', 'OtherInHomeActivityDetail', 'InHomeActivityResponse'] },
   { title: 'Carve-out', onlyIfPresent: true, keys: ['CarveOut', 'CarveStartTime', 'CarveEndTime', 'CarveOutReason', 'OtherCarveReasonDetail', 'CarveOut1', 'CarveStartTime1', 'CarveEndTime1', 'CarveOutReason1', 'OtherCarveReasonDetail1', 'CarveOut2', 'CarveStartTime2', 'CarveEndTime2', 'CarveOutReason2', 'OtherCarveReasonDetail2'] },
   { title: 'Summary', keys: ['DetailedSummaryNote', 'IndividualSurveyResponse'] },
   { title: 'Authorship', keys: ['ChartedByName', 'CreatedOn', 'LastModifiedByName', 'LastModifiedOn'] }
