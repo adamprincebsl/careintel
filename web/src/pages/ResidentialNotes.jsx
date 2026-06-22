@@ -39,6 +39,7 @@ export default function ResidentialNotes() {
   const [f, setF] = useState({ program: '', location: '', from: '', to: '', status: '' });
   const [applied, setApplied] = useState({ program: '', location: '', from: '', to: '', status: '' });
   const [selected, setSelected] = useState(null);
+  const [openId, setOpenId] = useState('');
 
   const { user } = useAuth();
   const canPhi = can(user, 'note.viewPhi');
@@ -64,6 +65,11 @@ export default function ResidentialNotes() {
       <div className="flex items-center gap-2">
         <ClipboardList className="h-5 w-5 text-beacon" />
         <h1 className="text-xl font-semibold">Residential Notes</h1>
+        <form onSubmit={(e) => { e.preventDefault(); if (openId.trim()) setSelected(openId.trim()); }} className="ml-auto flex items-center gap-1">
+          <input value={openId} onChange={(e) => setOpenId(e.target.value)} placeholder="Open note #"
+            className="w-32 rounded border border-border px-2 py-1 text-sm outline-none focus:border-beacon" />
+          <button className="rounded border border-beacon px-3 py-1 text-sm font-medium text-beacon hover:bg-beacon/5">Open</button>
+        </form>
       </div>
 
       {/* Filters */}
