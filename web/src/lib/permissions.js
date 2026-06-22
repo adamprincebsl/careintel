@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   'signal.manage': 'Configure signal thresholds / models',
   'client.viewInitials': 'View client initials + program context (de-identified)',
   'client.viewDwLink': 'Follow the approved link-back to the full client record in the data warehouse',
+  'note.viewPhi': 'View the full identified clinical note (PHI) for clients in scope',
   'c360.query': 'Run read-only c360 queries in the Explorer (build-out tool)',
   'admin.manage': 'Manage users, roles, and settings'
 };

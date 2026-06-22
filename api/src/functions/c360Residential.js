@@ -9,11 +9,14 @@
 // Gated `report.view`. De-identified (initials, no narrative). No client rows persisted.
 
 import { app } from '@azure/functions';
-import { authorize } from '../lib/authz.js';
+import { authorize, resolveClientScope, clientInScope } from '../lib/authz.js';
+import { logAccess } from '../lib/audit.js';
 import {
   queryResidentialNotesStructured, residentialNoteMetrics,
-  residentialFilterOptions, getResidentialNoteDetail
+  residentialFilterOptions, getResidentialNoteDetail, getResidentialNoteIdentified
 } from '../lib/c360Views.js';
+
+const NO_STORE = { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
 
 const filtersFrom = (q) => ({
   program: q.get('program') ?? undefined,
@@ -67,5 +70,32 @@ app.http('residentialNoteDetail', {
       const note = await getResidentialNoteDetail(request.params.id);
       return note ? { status: 200, jsonBody: { note } } : { status: 404, jsonBody: { error: 'note not found' } };
     } catch (err) { return fail(context, err); }
+  }
+});
+
+// FULL IDENTIFIED note (PHI). Gated note.viewPhi + location scope + fail-closed
+// access audit + no-store. The clinical-viewing surface for the formatted note.
+app.http('residentialNoteFull', {
+  methods: ['GET'], authLevel: 'anonymous', route: 'c360/residential/note/{id}/full',
+  handler: async (request, context) => {
+    const { principal, profile } = await authorize(request, 'note.viewPhi');
+    const id = request.params.id;
+    let note;
+    try { note = await getResidentialNoteIdentified(id); }
+    catch (err) { return { status: 502, headers: NO_STORE, jsonBody: { error: 'c360 unavailable', detail: err.message } }; }
+    if (!note) {
+      try { await logAccess({ actor: principal, action: 'view-note-phi', clientId: note?.ClientID ?? id, outcome: 'not-found' }); } catch { /* */ }
+      return { status: 404, headers: NO_STORE, jsonBody: { error: 'note not found' } };
+    }
+    // Location scope: the note's Program against the caller's client scope.
+    const scope = resolveClientScope(profile);
+    if (!clientInScope(scope, { ProgramId: note.Program, State: null })) {
+      try { await logAccess({ actor: principal, action: 'view-note-phi', clientId: note.ClientID, outcome: 'denied-scope' }); } catch { /* */ }
+      return { status: 403, headers: NO_STORE, jsonBody: { error: 'note outside your location scope' } };
+    }
+    // Fail-closed: don't serve PHI we can't log.
+    try { await logAccess({ actor: principal, action: 'view-note-phi', clientId: note.ClientID, outcome: 'granted' }); }
+    catch (err) { context.error(`note PHI access log failed: ${err.message}`); return { status: 503, headers: NO_STORE, jsonBody: { error: 'unable to record access; not served' } }; }
+    return { status: 200, headers: NO_STORE, jsonBody: { note } };
   }
 });

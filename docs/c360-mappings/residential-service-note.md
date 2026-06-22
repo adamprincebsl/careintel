@@ -110,6 +110,26 @@ and (c) score note **quality/completeness**. See §6.
 
 ---
 
+## 4a. HIPAA classification (the 93 columns)
+
+The note carries **PHII** (protected health information of identified individuals).
+Mapping columns to the HIPAA §164.514(b) identifier categories:
+
+| HIPAA identifier | Columns | Handling |
+|---|---|---|
+| **Names** | `FirstName`, `LastName` | Identified view only; de-id → **initials** |
+| **Dates** (DOB + service) | `ClientDOB`, `ServiceDate`, `ServiceStartTime/EndTime`, `CreatedOn`, `ProcessedDate` | DOB: identified only. Service dates retained for reporting (operational; tied to care). |
+| **Geographic < state** | `Program`, `Location` (a residential home = address-level) | Identified view shows the program; reporting rolls up to market/state via the location dim. |
+| **Record numbers** | `ClientID`, `BSL_ResidentialServiceNoteID`, `EncounterID` | Internal surrogates — kept as join keys; not shown to non-PHI users. |
+| **Free text (may embed any identifier)** | `DetailedSummaryNote`, `ResponsetoADL`, `AppointmentResponse`, `CommunityActivities`, `InHomeActivityResponse`, `*Details`, `OtherCarveReasonDetail*` | **PHI by default** — identified view + AI-scoring path only; never in the de-identified view. |
+| **Other demographic (PHI in context)** | `ClientGender` | Identified view only. |
+| **Workforce (PII, not client PHI)** | `CreatedBy(_)`, `LastModifiedBy(_)` | May be shown for accountability; still access-controlled + audited. |
+| **Non-identifying (safe)** | activity codes + `_` labels, `Duration`, `InRatio`, `IsAbsent`, `SubmissionStatus`, carve flags | Usable in the de-identified view + metrics. |
+
+**Two-view model:**
+- **`_Structured`** — de-identified (initials, no DOB/name/narrative). Reporting + AI. (§5)
+- **`_Identified`** — full PHI (names, DOB, gender, narrative). Authorized clinical viewing only — gated by `note.viewPhi` **+ location scope + fail-closed access audit** (same standard as the client lookup). (§5a)
+
 ## 5. Clean view — `vw_ResidentialServiceNote_Structured` (de-identified, no free text)
 
 Hand this to the data team to create in c360, or read the same SQL with approval.
@@ -146,6 +166,35 @@ FROM dbo.BSL_ResidentialServiceNote n
 LEFT JOIN dbo.s_UserDefinedOptions ss ON n.SubmissionStatus = ss.UDID  -- valid: real UDID FK
 LEFT JOIN dbo.s_Staff             cs ON n.CreatedBy        = cs.StaffId;  -- confirm staff table/cols
 ```
+
+## 5a. Identified view — `vw_ResidentialServiceNote_Identified` (full PHI)
+
+The authorized clinical view: full identifiers + narrative. Read only through the
+gated, audited endpoint (`note.viewPhi` + scope) — never by reporting/AI.
+
+```sql
+CREATE VIEW dbo.vw_ResidentialServiceNote_Identified AS
+SELECT
+  n.BSL_ResidentialServiceNoteID AS NoteId, n.ClientID,
+  n.FirstName, n.LastName, n.ClientDOB, n.ClientGender,            -- PHI identifiers
+  n.Program, n.Location, n.ServiceName,
+  n.ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio, n.IsAbsent,
+  n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
+  CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
+  n.CreatedBy_ AS ChartedByName, n.CreatedOn, n.LastModifiedBy_ AS LastModifiedByName, n.LastModifiedOn,
+  -- activities (code + denormalized label)
+  n.CommunityActivitesOffered_ AS CommunityServicesOffered,
+  n.Library, n.Park, n.Shopping, n.SpecialEvent, n.SportsExercise, n.Walk, n.WorshipService, n.[Other],
+  n.ActivitiesofDailyLiving, n.ResponsetoADL, n.Appointment, n.AppointmentResponse,
+  n.InHomeActivities, n.Games, n.Movie, n.CookingBaking, n.OutdoorActivities, n.OtherInHomeActivityDetail,
+  -- narrative (free text — PHI)
+  n.DetailedSummaryNote, n.IndividualSurveyResponse
+FROM dbo.BSL_ResidentialServiceNote n
+LEFT JOIN dbo.s_UserDefinedOptions ss ON n.SubmissionStatus = ss.UDID;
+```
+
+Implemented as `c360Views.getResidentialNoteIdentified` + `GET /api/c360/residential/note/{id}/full`
+(`note.viewPhi`, location scope, fail-closed `accessLog` audit, `no-store`).
 
 ## 6. PHI view — `vw_ResidentialServiceNote_NoteText` (scoring only)
 

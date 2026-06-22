@@ -196,6 +196,21 @@ export async function getResidentialNoteDetail(noteId) {
 }
 
 /**
+ * IDENTIFIED note (full PHI: names, DOB, gender, narrative). For authorized
+ * clinical viewing ONLY — callers MUST gate on note.viewPhi + location scope +
+ * fail-closed audit (see functions/c360Residential.js). Returns all note fields
+ * + resolved status label + ChartType. Returns Program for the scope check.
+ */
+export async function getResidentialNoteIdentified(noteId) {
+  const rows = await c360Query(`SELECT TOP 1 n.*,
+    ss.UDDescription AS SubmissionStatusLabel,
+    CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType
+    FROM ${NOTE} n LEFT JOIN ${UDO} ss ON n.SubmissionStatus = ss.UDID
+    WHERE n.BSL_ResidentialServiceNoteID = @id`, { id: parseInt(noteId, 10) });
+  return rows[0] || null;
+}
+
+/**
  * Validation / profiling of the residential-note table — confirms the mapping
  * against live data (status labels, offered/participated, data quality). All
  * aggregate; no client rows. Returns a structured report. Each section is
