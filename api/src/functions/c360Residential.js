@@ -18,9 +18,11 @@ import {
 const filtersFrom = (q) => ({
   program: q.get('program') ?? undefined,
   location: q.get('location') ?? undefined,
+  client: q.get('client') ?? undefined,
   from: q.get('from') ?? undefined,
   to: q.get('to') ?? undefined,
   status: q.get('status') ?? undefined,
+  chartType: q.get('chartType') ?? undefined,
   top: q.get('top') ?? undefined
 });
 const fail = (context, err) => {

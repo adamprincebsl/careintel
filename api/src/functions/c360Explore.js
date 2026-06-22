@@ -14,6 +14,39 @@ import { repo } from '../lib/cosmos.js';
 import { c360Query } from '../lib/fabricC360.js';
 import { runExplore } from '../lib/c360Explore.js';
 
+// Snapshot the FULL c360 schema (tables + row counts + columns) from Fabric and
+// persist it to this app's own Cosmos (c360Schema/c360-raw-schema). Lets the
+// data layer be designed against the real schema even when a dev's local link
+// to Fabric is unavailable — the snapshot is read back from Cosmos. Gated
+// c360.query. PHI-free (metadata only). GET so it's trivially browser-triggered.
+app.http('c360ExploreSnapshot', {
+  methods: ['GET', 'POST'],
+  authLevel: 'anonymous',
+  route: 'c360/explore/snapshot',
+  handler: async (request, context) => {
+    await authorize(request, 'c360.query');
+    try {
+      const tables = await c360Query(`SELECT s.name sch, t.name tbl, SUM(p.rows) [rows]
+        FROM sys.tables t JOIN sys.schemas s ON s.schema_id = t.schema_id
+        LEFT JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
+        GROUP BY s.name, t.name`);
+      const columns = await c360Query(`SELECT TABLE_SCHEMA sch, TABLE_NAME tbl, COLUMN_NAME col,
+        DATA_TYPE typ, CHARACTER_MAXIMUM_LENGTH len, IS_NULLABLE nul, ORDINAL_POSITION pos
+        FROM INFORMATION_SCHEMA.COLUMNS`);
+      const doc = {
+        id: 'c360-raw-schema', pk: 'c360Schema', kind: 'raw-schema', warehouse: 'core-prod-db',
+        tableCount: tables.length, columnCount: columns.length, tables, columns,
+        at: new Date().toISOString()
+      };
+      await repo('c360Schema').upsert(doc);
+      return { status: 200, jsonBody: { ok: true, tableCount: tables.length, columnCount: columns.length, savedTo: 'cosmos c360Schema/c360-raw-schema', at: doc.at } };
+    } catch (err) {
+      context.warn(`schema snapshot failed: ${err.message}`);
+      return { status: 502, jsonBody: { ok: false, error: err.message } };
+    }
+  }
+});
+
 const NO_STORE = { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
 const SYS = "('sys','INFORMATION_SCHEMA','queryinsights')";
 

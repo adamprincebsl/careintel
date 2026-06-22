@@ -74,8 +74,10 @@ const INITIALS = "UPPER(LEFT(LTRIM(n.FirstName),1)) + '.' + UPPER(LEFT(LTRIM(n.L
 const STRUCTURED_SELECT = `
   SELECT TOP (@top)
     n.BSL_ResidentialServiceNoteID AS NoteId,
+    n.ClientID                     AS ClientId,
     ${INITIALS}                    AS ClientInitials,
     n.Program, n.Location, n.ServiceName, n.ServiceDate, n.Duration, n.InRatio,
+    CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     n.CreatedBy        AS ChartedByStaffId,
     n.CreatedBy_       AS ChartedByName,
     n.CreatedOn        AS ChartedOn,
@@ -115,8 +117,12 @@ function residentialWhere(f = {}, alias = 'n') {
   if (f.location !== undefined && f.location !== null && f.location !== '') { conds.push(`${alias}.Location = @location`); params.location = parseInt(f.location, 10); }
   if (f.from) { conds.push(`${alias}.ServiceDate >= @from`); params.from = f.from; }
   if (f.to) { conds.push(`${alias}.ServiceDate <= @to`); params.to = f.to; }
+  if (f.client !== undefined && f.client !== null && f.client !== '') { conds.push(`${alias}.ClientID = @client`); params.client = parseInt(f.client, 10); }
   if (f.status === 'submitted') conds.push(`${alias}.SubmissionStatus IS NOT NULL`);
   if (f.status === 'saved') conds.push(`${alias}.SubmissionStatus IS NULL`);
+  // Scheduled (system-generated, CreatedBy blank) vs Adhoc (a staffer created it).
+  if (f.chartType === 'scheduled') conds.push(`${alias}.CreatedBy IS NULL`);
+  if (f.chartType === 'adhoc') conds.push(`${alias}.CreatedBy IS NOT NULL`);
   return { where: conds.length ? 'WHERE ' + conds.join(' AND ') : '', params };
 }
 
@@ -174,8 +180,9 @@ export async function residentialFilterOptions() {
 /** Full structured detail for ONE note (de-identified; NO free-text narrative — PHI). */
 export async function getResidentialNoteDetail(noteId) {
   const rows = await c360Query(`SELECT TOP 1
-    n.BSL_ResidentialServiceNoteID AS NoteId, ${INITIALS} AS ClientInitials,
+    n.BSL_ResidentialServiceNoteID AS NoteId, n.ClientID AS ClientId, ${INITIALS} AS ClientInitials,
     n.Program, n.Location, n.ServiceName, n.ServiceDate, n.ServiceStartTime, n.ServiceEndTime, n.Duration, n.InRatio,
+    CASE WHEN n.CreatedBy IS NULL THEN 'Scheduled' ELSE 'Adhoc' END AS ChartType,
     n.CreatedBy_ AS ChartedByName, n.CreatedOn, n.LastModifiedBy_ AS LastModifiedByName, n.LastModifiedOn,
     n.SubmissionStatus, ss.UDDescription AS SubmissionStatusLabel,
     CASE WHEN n.SubmissionStatus IS NULL THEN 'Saved' ELSE 'Submitted' END AS NoteState, n.IsAbsent,
