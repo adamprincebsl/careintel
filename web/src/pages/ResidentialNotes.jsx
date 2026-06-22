@@ -3,6 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { ClipboardList, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth-context';
+import { can } from '../lib/permissions';
+import NoteForm from '../components/NoteForm';
 
 // Residential Notes reporting page. Filters → KPIs (documented vs pending, time
 // charted) → activity metrics (community engagement, day-living/ADLs, home
@@ -37,11 +40,17 @@ export default function ResidentialNotes() {
   const [applied, setApplied] = useState({ program: '', location: '', from: '', to: '', status: '' });
   const [selected, setSelected] = useState(null);
 
+  const { user } = useAuth();
+  const canPhi = can(user, 'note.viewPhi');
   const { data: opts } = useQuery({ queryKey: ['res-options'], queryFn: api.resOptions });
   const qs = qsFrom(applied);
   const { data: metrics, isFetching: mFetch, error: mErr } = useQuery({ queryKey: ['res-metrics', qs], queryFn: () => api.resMetrics(qs) });
   const { data: list, isFetching: lFetch } = useQuery({ queryKey: ['res-notes', qs], queryFn: () => api.resNotes(`${qs}${qs ? '&' : ''}top=200`) });
-  const { data: detail } = useQuery({ queryKey: ['res-note', selected], queryFn: () => api.resNote(selected), enabled: !!selected });
+  const { data: detail, isFetching: dFetch, error: dErr } = useQuery({
+    queryKey: ['res-note', selected, canPhi],
+    queryFn: () => (canPhi ? api.resNoteFull(selected) : api.resNote(selected)),
+    enabled: !!selected
+  });
 
   const apply = (e) => { e.preventDefault(); setApplied({ ...f }); };
   const s = metrics?.status?.[0] || {};
@@ -166,21 +175,14 @@ export default function ResidentialNotes() {
       {/* Full note detail */}
       {selected && (
         <div className="fixed inset-0 z-20 flex justify-end bg-black/30" onClick={() => setSelected(null)}>
-          <div className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Note {selected}</h2>
+              <h2 className="text-lg font-semibold">Residential Note {selected}</h2>
               <button onClick={() => setSelected(null)}><X className="h-5 w-5 text-ink-muted" /></button>
             </div>
-            {!detail?.note ? <p className="text-sm text-ink-muted">Loading…</p> : (
-              <>
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                  {Object.entries(detail.note).map(([k, v]) => (
-                    <div key={k} className="contents"><dt className="font-medium text-ink-muted">{k}</dt><dd>{v == null ? '—' : String(v)}</dd></div>
-                  ))}
-                </dl>
-                <p className="mt-4 text-xs text-ink-muted">Full structured note (de-identified). The free-text narrative is omitted (PHI) — available only via the gated scoring path.</p>
-              </>
-            )}
+            {dErr && <p className="text-sm text-danger">{String(dErr.message)}</p>}
+            {dFetch && <p className="text-sm text-ink-muted">Loading…</p>}
+            {detail?.note && <NoteForm note={detail.note} phi={canPhi} />}
           </div>
         </div>
       )}

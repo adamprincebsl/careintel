@@ -55,6 +55,7 @@ export const api = {
   resMetrics: (qs) => getJson('/api/c360/residential/metrics' + (qs ? `?${qs}` : '')),
   resNotes: (qs) => getJson('/api/c360/residential/notes' + (qs ? `?${qs}` : '')),
   resNote: (id) => getJson(`/api/c360/residential/note/${encodeURIComponent(id)}`),
+  resNoteFull: (id) => getJson(`/api/c360/residential/note/${encodeURIComponent(id)}/full`),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),
