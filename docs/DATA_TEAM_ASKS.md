@@ -116,6 +116,11 @@ never made it into the warehouse.
     `_Objectives_Interventions`).
     - **Ask:** expose the residential-note ISP response child table (the per-note grid:
       note id + Goal/Objective/Intervention id + Response + SupportLevel + Prompts + Comments).
+    - **Confirmed by data:** `UD_IAP_MSDP_AssNeeds_Objectives_Interventions` is the **plan**
+      (7,019 rows ≈ 5,703 distinct objectives — one row per plan intervention — with only
+      **2** non-empty `Comments`). No c360 table references `BSL_ResidentialServiceNoteID`
+      or carries the per-shift response text, so the per-note responses are genuinely
+      absent from c360 (they live in the cx360 source sub-table, un-replicated).
 
 12. **BSP Objectives + Targeted Behavior — per-shift responses.**
     Same story: plan definitions are in c360 (`BSLBO_BspObjectives`,
