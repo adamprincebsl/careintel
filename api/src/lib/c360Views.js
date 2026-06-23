@@ -272,6 +272,33 @@ export async function getResidentialNoteIdentified(noteId) {
 }
 
 /**
+ * CLIENT CARE PLAN (ISP + BSP) — plan DEFINITIONS by ClientID (not per-shift
+ * responses; those aren't in c360, see DATA_TEAM_ASKS #11-12). ISP uses the
+ * client's most recent non-draft plan. PHI — caller gates note.viewPhi + audits.
+ */
+export async function getClientCarePlan(clientId) {
+  const cid = parseInt(clientId, 10);
+  const isp = await c360Query(`SELECT
+      g.Goal, o.Objective, i.InterventionMethod, i.Frequency, i.Responsible,
+      g.GoalStatus, o.ObjectiveStatus
+    FROM dbo.UD_IAP_MSDP p
+    JOIN dbo.UD_IAP_MSDP_AssessedNeeds n ON n.UD_IAP_MSDPID = p.UD_IAP_MSDPID
+    JOIN dbo.UD_IAP_MSDP_AssessedNeeds_Goals g ON g.UD_IAP_MSDP_AssessedNeedsID = n.UD_IAP_MSDP_AssessedNeedsID
+    LEFT JOIN dbo.UD_IAP_MSDP_AssNeeds_Goals_Objectives o ON o.UD_IAP_MSDP_AssessedNeeds_GoalsID = g.UD_IAP_MSDP_AssessedNeeds_GoalsID
+    LEFT JOIN dbo.UD_IAP_MSDP_AssNeeds_Objectives_Interventions i ON i.UD_IAP_MSDP_AssNeeds_Goals_ObjectivesID = o.UD_IAP_MSDP_AssNeeds_Goals_ObjectivesID
+    WHERE p.UD_IAP_MSDPID = (SELECT TOP 1 UD_IAP_MSDPID FROM dbo.UD_IAP_MSDP
+        WHERE ClientID = @cid AND ISNULL(IsDraft,0) = 0 ORDER BY EffectiveDate DESC, UD_IAP_MSDPID DESC)
+    ORDER BY g.UD_IAP_MSDP_AssessedNeeds_GoalsID, o.UD_IAP_MSDP_AssNeeds_Goals_ObjectivesID`, { cid }).catch(() => []);
+  const bspObjectives = await c360Query(`SELECT TOP 100 OutcomePhrase, OutcomeStatement, OutcomeStrategy, OutcomeStatus
+    FROM dbo.BSLBO_BspObjectives WHERE ClientID = @cid AND ISNULL(IsDraft,0) = 0 ORDER BY CreatedOn DESC`, { cid }).catch(() => []);
+  const targetBehaviors = await c360Query(`SELECT TOP 100 TargetBehavior,
+      Whatdoesthebehaviorlooklikefortheindividual AS Definition,
+      FunctionoftheBehavior AS [Function], TargetBehaviorStatus_ AS Status
+    FROM dbo.BSLTB_TargetBehavior WHERE ClientID = @cid AND ISNULL(IsDraft,0) = 0 ORDER BY CreatedOn DESC`, { cid }).catch(() => []);
+  return { isp, bspObjectives, targetBehaviors };
+}
+
+/**
  * Validation / profiling of the residential-note table — confirms the mapping
  * against live data (status labels, offered/participated, data quality). All
  * aggregate; no client rows. Returns a structured report. Each section is

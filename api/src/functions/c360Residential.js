@@ -13,7 +13,8 @@ import { authorize, resolveClientScope, clientInScope } from '../lib/authz.js';
 import { logAccess } from '../lib/audit.js';
 import {
   queryResidentialNotesStructured, residentialNoteMetrics,
-  residentialFilterOptions, getResidentialNoteDetail, getResidentialNoteIdentified
+  residentialFilterOptions, getResidentialNoteDetail, getResidentialNoteIdentified,
+  getClientCarePlan
 } from '../lib/c360Views.js';
 
 const NO_STORE = { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
@@ -97,5 +98,20 @@ app.http('residentialNoteFull', {
     try { await logAccess({ actor: principal, action: 'view-note-phi', clientId: note.ClientID, outcome: 'granted' }); }
     catch (err) { context.error(`note PHI access log failed: ${err.message}`); return { status: 503, headers: NO_STORE, jsonBody: { error: 'unable to record access; not served' } }; }
     return { status: 200, headers: NO_STORE, jsonBody: { note } };
+  }
+});
+
+// CLIENT CARE PLAN (ISP + BSP plan definitions). PHI — gated note.viewPhi + audited.
+app.http('residentialClientCarePlan', {
+  methods: ['GET'], authLevel: 'anonymous', route: 'c360/residential/client/{clientId}/care-plan',
+  handler: async (request, context) => {
+    const { principal } = await authorize(request, 'note.viewPhi');
+    const cid = request.params.clientId;
+    let plan;
+    try { plan = await getClientCarePlan(cid); }
+    catch (err) { return { status: 502, headers: NO_STORE, jsonBody: { error: 'c360 unavailable', detail: err.message } }; }
+    try { await logAccess({ actor: principal, action: 'view-care-plan', clientId: cid, outcome: 'granted' }); }
+    catch (err) { context.error(`care-plan access log failed: ${err.message}`); return { status: 503, headers: NO_STORE, jsonBody: { error: 'unable to record access; not served' } }; }
+    return { status: 200, headers: NO_STORE, jsonBody: plan };
   }
 });

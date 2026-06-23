@@ -56,6 +56,7 @@ export const api = {
   resNotes: (qs) => getJson('/api/c360/residential/notes' + (qs ? `?${qs}` : '')),
   resNote: (id) => getJson(`/api/c360/residential/note/${encodeURIComponent(id)}`),
   resNoteFull: (id) => getJson(`/api/c360/residential/note/${encodeURIComponent(id)}/full`),
+  carePlan: (clientId) => getJson(`/api/c360/residential/client/${encodeURIComponent(clientId)}/care-plan`),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),

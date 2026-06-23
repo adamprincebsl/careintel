@@ -2,6 +2,8 @@
 // (grouped sections, friendly labels, blanks marked) instead of raw JSON.
 // Works for both the identified (/full) and de-identified (/note/{id}) shapes;
 // fields absent from the payload are simply skipped.
+import { useState } from 'react';
+import CarePlan from './CarePlan';
 
 const LABELS = {
   ClientId: 'Client ID', ClientInitials: 'Client', FirstName: 'First name', LastName: 'Last name',
@@ -83,6 +85,7 @@ function Field({ k, v, tz }) {
 }
 
 export default function NoteForm({ note, phi }) {
+  const [showPlan, setShowPlan] = useState(false);
   if (!note) return null;
   const tz = tzFor(note.State);
   const used = new Set();
@@ -100,6 +103,23 @@ export default function NoteForm({ note, phi }) {
       {phi && (
         <div className="rounded border border-gold bg-gold-tint px-3 py-1.5 text-xs text-gold-dark">
           Identified clinical note (PHI) — access is audited.
+        </div>
+      )}
+      {phi && note.ClientId != null && (
+        <button onClick={() => setShowPlan(true)}
+          className="rounded border border-beacon px-3 py-1 text-sm font-medium text-beacon hover:bg-beacon/5">
+          View ISP / BSP Care Plan
+        </button>
+      )}
+      {showPlan && (
+        <div className="fixed inset-0 z-50 flex bg-black/40 p-4" onClick={() => setShowPlan(false)}>
+          <div className="m-auto max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Care Plan (ISP / BSP)</h2>
+              <button onClick={() => setShowPlan(false)} className="text-ink-muted">✕</button>
+            </div>
+            <CarePlan clientId={note.ClientId} />
+          </div>
         </div>
       )}
       {sections.map((s) => (
