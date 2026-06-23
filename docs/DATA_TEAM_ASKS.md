@@ -88,6 +88,48 @@ workspace as `BSL_Silver_Warehouse`.
 
 ---
 
+## C-bis. Residential Service Note — child data missing from c360  — **blocks ADL + ISP/BSP**
+
+Validated against the source form (`ResidentialServiceNote.aspx`) vs. c360 for real
+notes (74837, 77924). The flat `BSL_ResidentialServiceNote` table is in c360, but
+the note's **child/related rows are not** — confirmed: **no table in c360 references
+`BSL_ResidentialServiceNoteID`** (only the note itself), so the per-shift sub-records
+never made it into the warehouse.
+
+10. **ADL selections (the "Activities of Daily Living" checklist).**
+    The form is a 17-item multi-select (UDIDs 89938–89954: Ambulation, Bathing,
+    Dressing, Eating, Grooming, Laundry, Meal Prep, Med Admin, … Toileting,
+    Transferring, Transportation). In c360 the only column is
+    `BSL_ResidentialServiceNote.ActivitiesofDailyLiving` (**single `int`, NULL on all
+    58,025 rows**) — i.e. the checklist is **not replicated at all**. Only the
+    free-text `ResponsetoADL` is present.
+    - **Ask:** expose the per-note ADL selections in c360 (the source child table, or
+      a delimited/`_`-denormalized column on the note).
+    - *Unblocks:* the "ADLs addressed" field in the note view.
+
+11. **ISP Goals/Objectives/Interventions — per-shift responses.**
+    The form pre-loads the client's ISP and staff chart, per shift, **Response**
+    (Met/Partially/Not Met), **Support Level**, **# Support Prompts**, **Comments**
+    against each Goal/Objective/Intervention. These responses are **not in c360**
+    (no residential-note intervention child table). c360 has only the **plan
+    definitions** (`UD_IAP_MSDP_AssessedNeeds_Goals` → `_Goals_Objectives` →
+    `_Objectives_Interventions`).
+    - **Ask:** expose the residential-note ISP response child table (the per-note grid:
+      note id + Goal/Objective/Intervention id + Response + SupportLevel + Prompts + Comments).
+
+12. **BSP Objectives + Targeted Behavior — per-shift responses.**
+    Same story: plan definitions are in c360 (`BSLBO_BspObjectives`,
+    `BSLTB_TargetBehavior` by `ClientID`); the per-shift responses/occurrences charted
+    on the Residential Service Note are not. (Note: a child table exists for the
+    *Behavior Support Residential Note* — `BSLBR_…_Interventions_BSP` — but that's a
+    different note type.)
+    - **Ask:** expose the residential-note BSP response + targeted-behavior-occurrence
+      child tables.
+
+    *Until 10–12 land,* the note view can show the **client's plan** (goals/objectives/
+    interventions, BSP objectives, target behaviors) as context from the plan tables,
+    but **not** what was charted on a specific shift.
+
 ## D. Compliance confirmations  — needed before go-live with real data
 
 8. **Audit-log retention alignment.**
@@ -116,6 +158,9 @@ workspace as `BSL_Silver_Warehouse`.
 | 7 | Top ~10 questions | Users + data | assistant tool catalog |
 | 8 | Retention alignment | Compliance | go-live |
 | 9 | Embedding model quota | IT / Azure | RAG phase (C4) |
+| 10 | ADL selections into c360 | Data team | "ADLs addressed" field |
+| 11 | ISP per-shift responses into c360 | Data team | ISP goals popout (per-shift) |
+| 12 | BSP/target-behavior responses into c360 | Data team | BSP popout (per-shift) |
 
 **Fastest unblock:** #1 (Viewer grant) + #5 (run the dump, review the dictionary)
 get us to real de-identified reporting. #2 + #7 unblock the assistant.
