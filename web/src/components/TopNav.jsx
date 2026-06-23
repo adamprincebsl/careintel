@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { BarChart3, MessageSquareText, Sparkles, UserSearch, Settings, Database, ClipboardList } from 'lucide-react';
+import { BarChart3, MessageSquareText, Sparkles, UserSearch, Settings, Database, ClipboardList, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
 
@@ -36,6 +36,11 @@ export default function TopNav() {
           {features.c360 !== false && can(user, 'report.view') && (
             <NavLink to="/c360/residential" className={navClass}>
               <ClipboardList className="h-4 w-4" /> Res Notes
+            </NavLink>
+          )}
+          {features.c360 !== false && can(user, 'report.view') && (
+            <NavLink to="/c360/incidents" className={navClass}>
+              <AlertTriangle className="h-4 w-4" /> Incidents
             </NavLink>
           )}
           {can(user, 'c360.query') && (

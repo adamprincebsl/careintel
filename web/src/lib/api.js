@@ -57,6 +57,11 @@ export const api = {
   resNote: (id) => getJson(`/api/c360/residential/note/${encodeURIComponent(id)}`),
   resNoteFull: (id) => getJson(`/api/c360/residential/note/${encodeURIComponent(id)}/full`),
   carePlan: (clientId) => getJson(`/api/c360/residential/client/${encodeURIComponent(clientId)}/care-plan`),
+  // Incidents
+  incOptions: () => getJson('/api/c360/incidents/options'),
+  incMetrics: (qs) => getJson('/api/c360/incidents/metrics' + (qs ? `?${qs}` : '')),
+  incList: (qs) => getJson('/api/c360/incidents/list' + (qs ? `?${qs}` : '')),
+  incFull: (id) => getJson(`/api/c360/incidents/${encodeURIComponent(id)}/full`),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),
