@@ -97,6 +97,9 @@ export async function getIncidentIdentified(id) {
     i.Descriptionofwhentheincidentoccurred AS WhenOccurred,
     i.Descriptionofwhytheincidentoccurred AS WhyOccurred,
     i.Descriptionofhowtheincidentoccurred AS HowOccurred,
+    i.Wheredidthefalloccur AS FallLocation,
+    i.Whatwasgoingonwiththeindividualimmediatelyprecedingthefall AS FallPreceding,
+    i.Whatcontributingfactorswererelatedtotheindividualsfall AS FallContributingFactors,
     i.Was911called_ AS Was911Called, i.RecommendationsfromtheTeam AS TeamRecommendations,
     i.BloodPressure, i.Temperature, i.HeartRate, i.Respirations, i.BloodSugar,
     i.CreatedBy_ AS ReportedBy, i.CreatedOn, i.LastModifiedOn
@@ -106,4 +109,28 @@ export async function getIncidentIdentified(id) {
     LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
     WHERE i.BSL_IncidentID = @id`, { id: parseInt(id, 10) });
   return rows[0] || null;
+}
+
+// Child + workflow sub-forms for one incident (each linked by BSL_IncidentID).
+// Returns raw rows (TOP 1 each; witness can be many) — the UI filters system/blank
+// columns. Fall is omitted (client-keyed; its detail is inline on the incident).
+const SUBFORMS = [
+  ['deathReporting', 'BSL_IncidentDeathReporting'],
+  ['medicationVariance', 'BSL_IncidentMedicationVariance'],
+  ['sib', 'BSL_IncidentSib'],
+  ['rootCause', 'BSL_IncidentRootCauseAnalysis'],
+  ['correctiveAction', 'BSL_IncidentCorrectiveActionPlan'],
+  ['clinicalDebrief', 'BSLPA_IncidentClinicalDebriefTwo'],
+  ['supervisorFollowUp', 'BSL_IncidentSupervisorFollowUpTwo'],
+  ['qaFollowUp', 'BSL_IncidentQaFollowUp']
+];
+export async function getIncidentSubforms(id) {
+  const iid = parseInt(id, 10);
+  const out = {};
+  for (const [key, tbl] of SUBFORMS) {
+    const rows = await c360Query(`SELECT TOP 1 * FROM dbo.${tbl} WHERE BSL_IncidentID = @id`, { id: iid }).catch(() => []);
+    out[key] = rows[0] || null;
+  }
+  out.witness = await c360Query(`SELECT * FROM dbo.BSLVA_IncidentWitnessInvestigation WHERE BSL_IncidentID = @id`, { id: iid }).catch(() => []);
+  return out;
 }

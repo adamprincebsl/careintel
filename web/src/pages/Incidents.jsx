@@ -20,22 +20,39 @@ function Kpi({ label, value, tone, sub }) {
 const DETAIL_SECTIONS = [
   { title: 'Incident', keys: ['IncidentId', 'IncidentDate', 'TimeofIncident', 'IncidentTypes', 'Severity', 'PlaceOfIncident', 'OtherLocation', 'Facility', 'State', 'IndividualRef', 'Was911Called'] },
   { title: 'What happened', keys: ['WhatHappened', 'WhereOccurred', 'WhenOccurred', 'WhyOccurred', 'HowOccurred', 'TeamRecommendations'] },
+  { title: 'Fall', keys: ['FallLocation', 'FallPreceding', 'FallContributingFactors'] },
   { title: 'Vitals', keys: ['BloodPressure', 'Temperature', 'HeartRate', 'Respirations', 'BloodSugar'] },
   { title: 'Reporting', keys: ['ReportedBy', 'CreatedOn', 'LastModifiedOn'] }
 ];
+// Child + workflow sub-forms (rendered generically — labels = cleaned column names
+// until decoded from the source forms).
+const SUBFORM_TITLES = [
+  ['deathReporting', 'Death Reporting'], ['medicationVariance', 'Medication Variance'],
+  ['sib', 'Self-Injurious Behavior'], ['rootCause', 'Root Cause Analysis'],
+  ['correctiveAction', 'Corrective Action Plan'], ['clinicalDebrief', 'Clinical Debrief'],
+  ['supervisorFollowUp', 'Supervisor Follow-up'], ['qaFollowUp', 'QA Follow-up']
+];
+const SKIP_COLS = new Set(['CompanyID', 'IsDraft', 'RowGUID', 'RowId', 'RowVer', 'SourceKeyFieldID', 'SourceCompanyID', 'LegacyEHRID']);
+const cleanLabel = (k) => k.replace(/_$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+const isSkip = (k) => /ID$/.test(k) || SKIP_COLS.has(k);
+function subformEntries(row) {
+  return Object.entries(row).filter(([k, v]) => v != null && v !== '' && !isSkip(k) && row[k + '_'] == null);
+}
 const LABELS = {
   IncidentId: 'Incident #', IncidentDate: 'Date', TimeofIncident: 'Time', IncidentTypes: 'Type(s)',
   Severity: 'Severity', PlaceOfIncident: 'Place', OtherLocation: 'Other location', Facility: 'Facility',
   State: 'State', IndividualRef: 'Individual (ref)', Was911Called: '911 called',
   WhatHappened: 'What happened', WhereOccurred: 'Where', WhenOccurred: 'When', WhyOccurred: 'Why',
   HowOccurred: 'How', TeamRecommendations: 'Team recommendations',
+  FallLocation: 'Where the fall occurred', FallPreceding: 'Immediately preceding the fall', FallContributingFactors: 'Contributing factors',
   BloodPressure: 'Blood pressure', Temperature: 'Temperature', HeartRate: 'Heart rate',
   Respirations: 'Respirations', BloodSugar: 'Blood sugar', ReportedBy: 'Reported by',
   CreatedOn: 'Created on', LastModifiedOn: 'Last modified'
 };
-const LONG = new Set(['WhatHappened', 'WhereOccurred', 'WhenOccurred', 'WhyOccurred', 'HowOccurred', 'TeamRecommendations']);
+const LONG = new Set(['WhatHappened', 'WhereOccurred', 'WhenOccurred', 'WhyOccurred', 'HowOccurred', 'TeamRecommendations', 'FallPreceding', 'FallContributingFactors']);
 function fmt(v) {
   if (v == null || v === '') return null;
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v)) {
     const d = new Date(v);
     return /T00:00:00/.test(v) ? d.toLocaleDateString('en-US', { timeZone: 'UTC' }) : d.toLocaleString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' });
@@ -169,6 +186,46 @@ export default function Incidents() {
                     </section>
                   );
                 })}
+
+                {detail.subforms && (() => {
+                  const sf = detail.subforms;
+                  const present = SUBFORM_TITLES.filter(([k]) => sf[k] && subformEntries(sf[k]).length);
+                  const witness = Array.isArray(sf.witness) ? sf.witness : [];
+                  if (!present.length && !witness.length) return null;
+                  return (
+                    <div className="space-y-2 pt-2">
+                      <h3 className="text-sm font-semibold text-beacon">Child &amp; workflow reports</h3>
+                      {present.map(([k, title]) => (
+                        <details key={k} className="rounded border border-border p-2">
+                          <summary className="cursor-pointer text-sm font-medium">{title}</summary>
+                          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                            {subformEntries(sf[k]).map(([col, v]) => (
+                              <div key={col} className={String(v).length > 60 ? 'col-span-2' : ''}>
+                                <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{cleanLabel(col)}</dt>
+                                <dd className="text-sm">{fmt(v)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </details>
+                      ))}
+                      {witness.length > 0 && (
+                        <details className="rounded border border-border p-2">
+                          <summary className="cursor-pointer text-sm font-medium">Witness / Investigation ({witness.length})</summary>
+                          {witness.map((w, i) => (
+                            <dl key={i} className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-border pt-2 first:border-0">
+                              {subformEntries(w).map(([col, v]) => (
+                                <div key={col} className={String(v).length > 60 ? 'col-span-2' : ''}>
+                                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{cleanLabel(col)}</dt>
+                                  <dd className="text-sm">{fmt(v)}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ))}
+                        </details>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
