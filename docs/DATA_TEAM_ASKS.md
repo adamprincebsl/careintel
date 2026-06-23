@@ -103,9 +103,17 @@ never made it into the warehouse.
     `BSL_ResidentialServiceNote.ActivitiesofDailyLiving` (**single `int`, NULL on all
     58,025 rows**) — i.e. the checklist is **not replicated at all**. Only the
     free-text `ResponsetoADL` is present.
-    - **Ask:** expose the per-note ADL selections in c360 (the source child table, or
-      a delimited/`_`-denormalized column on the note).
-    - *Unblocks:* the "ADLs addressed" field in the note view.
+    - **Diagnosis (likely a type defect, not a missing table):** c360 *already* has the
+      column `ActivitiesofDailyLiving` but typed **`int`** and **NULL on all 58,025 rows**.
+      Its single-select siblings (`Shopping`, `Library`, `Games`…) are also `int` and
+      populate fine; ADL is the only **multi-select** (e.g. `"89938,89939,89944"`), which
+      can't fit an `int` → drops to NULL.
+    - **Ask:** replicate `ActivitiesofDailyLiving` as **`varchar`** (delimited UDID list),
+      or add a denormalized `ActivitiesofDailyLiving_` text column (like the other
+      activities). Source check: `SELECT TOP 20 ActivitiesofDailyLiving FROM
+      BSL_ResidentialServiceNote WHERE ActivitiesofDailyLiving IS NOT NULL` — if it's a
+      delimited string, re-typing is the whole fix.
+    - *Unblocks:* the "ADLs addressed" field in the note view (we resolve the UDIDs → labels).
 
 11. **ISP Goals/Objectives/Interventions — per-shift responses.**
     The form pre-loads the client's ISP and staff chart, per shift, **Response**
