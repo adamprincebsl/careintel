@@ -47,7 +47,13 @@ function fmt(v) {
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v)) {
     const d = new Date(v);
-    return v.includes('00:00:00') ? d.toLocaleDateString() : d.toLocaleString();
+    if (isNaN(d.getTime())) return String(v);
+    // Render in UTC so the stored wall-clock shows as-is — avoids the off-by-one
+    // day (DOB) and clock shift from the runtime/browser timezone.
+    const dateOnly = /T00:00:00/.test(v);
+    return dateOnly
+      ? d.toLocaleDateString('en-US', { timeZone: 'UTC' })
+      : d.toLocaleString('en-US', { timeZone: 'UTC' });
   }
   return String(v);
 }
