@@ -42,24 +42,35 @@ const SECTIONS = [
 
 const LONG = new Set(['DetailedSummaryNote', 'CommunityActivities', 'ResponsetoADL', 'AppointmentResponse', 'OtherInHomeActivityDetail', 'InHomeActivityResponse', 'IndividualSurveyResponse', 'OtherCarveReasonDetail', 'OtherCarveReasonDetail1', 'OtherCarveReasonDetail2']);
 
-function fmt(v) {
+// Beacon operates in Eastern + Central states. Times are stored UTC; show them in
+// the facility's local zone (by state). Default Eastern; only Central states differ.
+const CENTRAL_STATES = new Set([
+  'MO', 'Missouri', 'IL', 'Illinois', 'WI', 'Wisconsin', 'MN', 'Minnesota', 'IA', 'Iowa',
+  'TX', 'Texas', 'KS', 'Kansas', 'NE', 'Nebraska', 'OK', 'Oklahoma', 'AR', 'Arkansas',
+  'LA', 'Louisiana', 'ND', 'North Dakota', 'SD', 'South Dakota'
+]);
+function tzFor(state) {
+  return state && CENTRAL_STATES.has(String(state).trim()) ? 'America/Chicago' : 'America/New_York';
+}
+
+function fmt(v, tz) {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   if (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v)) {
     const d = new Date(v);
     if (isNaN(d.getTime())) return String(v);
-    // Render in UTC so the stored wall-clock shows as-is — avoids the off-by-one
-    // day (DOB) and clock shift from the runtime/browser timezone.
+    // Date-only values (DOB, service date) render in UTC so the day never shifts.
+    // Datetimes (service times, charted-on) convert UTC -> the facility's state zone.
     const dateOnly = /T00:00:00/.test(v);
     return dateOnly
       ? d.toLocaleDateString('en-US', { timeZone: 'UTC' })
-      : d.toLocaleString('en-US', { timeZone: 'UTC' });
+      : d.toLocaleString('en-US', { timeZone: tz || 'America/New_York', timeZoneName: 'short' });
   }
   return String(v);
 }
 
-function Field({ k, v }) {
-  const val = fmt(v);
+function Field({ k, v, tz }) {
+  const val = fmt(v, tz);
   const long = LONG.has(k);
   return (
     <div className={long ? 'col-span-2' : ''}>
@@ -73,12 +84,13 @@ function Field({ k, v }) {
 
 export default function NoteForm({ note, phi }) {
   if (!note) return null;
+  const tz = tzFor(note.State);
   const used = new Set();
   const sections = SECTIONS.map((s) => {
     const inNote = s.keys.filter((k) => k in note);
     inNote.forEach((k) => used.add(k)); // claim all keys so blanks don't leak to "Other"
     // onlyIfPresent sections (e.g. Carve-out) render only their non-blank fields, and disappear if none.
-    const present = s.onlyIfPresent ? inNote.filter((k) => fmt(note[k]) != null) : inNote;
+    const present = s.onlyIfPresent ? inNote.filter((k) => fmt(note[k], tz) != null) : inNote;
     return { ...s, present };
   }).filter((s) => s.present.length);
   const other = Object.keys(note).filter((k) => !used.has(k) && k !== 'NoteId');
@@ -94,7 +106,7 @@ export default function NoteForm({ note, phi }) {
         <section key={s.title}>
           <h3 className="mb-1.5 border-b border-border pb-1 text-sm font-semibold text-beacon">{s.title}</h3>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-            {s.present.map((k) => <Field key={k} k={k} v={note[k]} />)}
+            {s.present.map((k) => <Field key={k} k={k} v={note[k]} tz={tz} />)}
           </dl>
         </section>
       ))}
@@ -102,7 +114,7 @@ export default function NoteForm({ note, phi }) {
         <details className="rounded border border-border p-2">
           <summary className="cursor-pointer text-xs font-medium text-ink-muted">Other documented fields ({other.length})</summary>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {other.map((k) => <Field key={k} k={k} v={note[k]} />)}
+            {other.map((k) => <Field key={k} k={k} v={note[k]} tz={tz} />)}
           </dl>
         </details>
       )}
