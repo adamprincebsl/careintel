@@ -1,9 +1,20 @@
 # c360 replication request — Residential Service Note child tables
 
-**Ask:** replicate the Residential Service Note's per-shift **child tables** from the
-cx360 source into c360 (`core-prod-db`). The parent `BSL_ResidentialServiceNote` is
-present, but none of its child rows are — so the goals/BSP/behavior responses and the
-ADL checklist that staff chart on every note are invisible to reporting/AI.
+**Headline ask:** c360 already replicates the *child* tables for the **Behavior Support
+Residential Note** (`BSLBR_BehaviorSupportResidentialNote_Interventions_BSP`) and the
+**Incident** form (`BSL_Incident_BehaviorInterventions`, `BSL_Incident_MedicalInterventions`).
+Please replicate the **Residential Service Note's** equivalents the same way — its ISP
+interventions, BSP interventions, targeted-behavior occurrences, and ADL selections —
+keyed by `BSL_ResidentialServiceNoteID`.
+
+**Why:** the parent `BSL_ResidentialServiceNote` is in c360, but **none of its child rows
+are** — so the goals/BSP/behavior responses and the ADL checklist that staff chart on
+every note are invisible to reporting/AI.
+
+**Scope note:** these were confirmed missing by querying **c360 only** — the BCI app
+can't see the cx360 transactional source. The exact source table names must be traced by
+the data team / Core Solutions from the form (they may not follow the `BSL_ResidentialServiceNote_*`
+naming — the app-factory framework often names child tables generically).
 
 ## Evidence (run in c360)
 ```sql
@@ -18,14 +29,16 @@ all 58,025 rows**, and `UD_IAP_MSDP_AssNeeds_Objectives_Interventions` is the **
 
 ## Tables needed (link each to `BSL_ResidentialServiceNoteID`)
 
-| # | Purpose | Expected source table | Key columns (per the Core form) |
+| # | Purpose | Source table | Key columns (per the Core form) |
 |---|---|---|---|
-| 1 | **ISP** goal/objective/intervention responses (per shift) | `BSL_ResidentialServiceNote_Interventions` | NoteID, GoalID, ObjectiveID, InterventionID, ResponseToService, SupportLevel, SupportPrompts, Comments |
-| 2 | **BSP** objective responses (per shift) | `BSL_ResidentialServiceNote_Interventions_BSP` | NoteID, ObjectiveID, ResponseToService, SupportLevel, SupportPrompts, Comments |
-| 3 | **Targeted behavior** occurrences (per shift) | `BSL_ResidentialServiceNote_TargetBehavior` | NoteID, TargetBehaviorID, Intensity, Duration, StaffResponse, IndividualsResponse, NumberOfOccurrences, Comments |
-| 4 | **ADLs addressed** (17-item multi-select) | `BSL_ResidentialServiceNote_ActivitiesOfDailyLiving` (or denormalize onto the note) | NoteID, ADL UDID/label |
+| 1 | **ISP** goal/objective/intervention responses (per shift) | *trace from form* (`hdnLoadedInterventions`) | NoteFK, GoalID, ObjectiveID, InterventionID, ResponseToService, SupportLevel, SupportPrompts, Comments |
+| 2 | **BSP** objective responses (per shift) | *trace from form* (`hdnInterventionValuesBSP`) | NoteFK, ObjectiveID, ResponseToService, SupportLevel, SupportPrompts, Comments |
+| 3 | **Targeted behavior** occurrences (per shift) | *trace from form* (`hdnTargetedBehaviorOccurrences`) | NoteFK, TargetBehaviorID, Intensity, Duration, StaffResponse, IndividualsResponse, NumberOfOccurrences, Comments |
+| 4 | **ADLs addressed** (17-item multi-select) | *trace from form* (`cblActivitiesOfDailyLiving`) | NoteFK, ADL UDID/label |
 
-*Table names are the expected Cx360 pattern (mirrors `BSLBR_BehaviorSupportResidentialNote_Interventions_BSP`, the one child that did replicate — for a different note type). Please confirm the exact source names.*
+*Source table names unknown from c360 (name search returns only the parent). The form's
+hidden-field names above are the trace points; the data team / vendor maps each to its
+persistence table, then replicates to c360 keyed by `BSL_ResidentialServiceNoteID`.*
 
 ## To find the real source names (run in the cx360 source DB)
 ```sql
