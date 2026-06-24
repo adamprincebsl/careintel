@@ -129,7 +129,7 @@ export async function getIncidentIdentified(id) {
     ${udo('InjuryType')} AS InjuryType, ${udo('InjuryLocationPrimaryAreaoftheBody')} AS InjuryAreaPrimary,
     ${udo('InjuryLocationSpecificAreaoftheBody')} AS InjuryAreaSpecific,
     ${udo('TreatmentProvidedBy')} AS TreatmentProvidedBy, ${udo('MedicalInterventions')} AS MedicalInterventions,
-    i.Wasseizureprotocolfollowed_ AS SeizureProtocolFollowed, ${udo('SeizureDetails')} AS SeizureDetails,
+    ${udo('Wasseizureprotocolfollowed')} AS SeizureProtocolFollowed, ${udo('SeizureDetails')} AS SeizureDetails,
     i.SeizureStartTime, i.SeizureEndTime,
     i.Definedasachokingevent_ AS ChokingEvent, i.Whatdidtheindividualchokeon AS ChokedOn,
     i.Whatwastheindividualdoingatthetimeofthechokingincident AS ChokingActivity,
