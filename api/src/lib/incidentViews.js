@@ -34,9 +34,9 @@ export async function incidentFilterOptions() {
     FROM ${TYPE} t JOIN ${UDO} u ON t.TypeofIncident = u.UDID ORDER BY u.UDDescription`).catch(() => []);
   const severities = await c360Query(`SELECT DISTINCT i.Severity id, u.UDDescription name
     FROM ${INC} i JOIN ${UDO} u ON i.Severity = u.UDID ORDER BY u.UDDescription`).catch(() => []);
-  const facilities = await c360Query(`SELECT DISTINCT i.HomeFacility id, loc.LocationName name
-    FROM ${INC} i LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
-    WHERE i.HomeFacility IS NOT NULL ORDER BY loc.LocationName`).catch(() => []);
+  const facilities = await c360Query(`SELECT DISTINCT loc.LocationID id, loc.LocationName name
+    FROM ${INC} i JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
+    WHERE loc.LocationName IS NOT NULL ORDER BY loc.LocationName`).catch(() => []);
   return { types: types.map(m), severities: severities.map(m), facilities: facilities.map(m) };
 }
 
@@ -61,6 +61,10 @@ export async function incidentMetrics(f = {}) {
   await run('byPlace', `SELECT TOP 15 COALESCE(pl.UDDescription,'(none)') place, COUNT(*) c
     FROM ${INC} i LEFT JOIN ${UDO} pl ON i.LocationofIncident = pl.UDID ${clause}
     GROUP BY pl.UDDescription ORDER BY c DESC`);
+  // By individual (IndividualServedsName is a stable per-person ref; not yet name-resolved)
+  await run('byClient', `SELECT TOP 20 i.IndividualServedsName clientRef, COUNT(*) c
+    FROM ${INC} i ${clause ? clause + ' AND' : 'WHERE'} i.IndividualServedsName IS NOT NULL
+    GROUP BY i.IndividualServedsName ORDER BY c DESC`);
   return out;
 }
 

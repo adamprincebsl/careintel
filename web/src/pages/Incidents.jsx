@@ -77,6 +77,8 @@ export default function Incidents() {
 
   const s = metrics?.total?.[0] || {};
   const byType = metrics?.byType || [];
+  const byClient = metrics?.byClient || [];
+  const tCount = (re) => { const m = byType.find((t) => re.test(t.label || '')); return m ? m.c : 0; };
 
   return (
     <div className="space-y-4">
@@ -113,11 +115,12 @@ export default function Incidents() {
         <button onClick={() => setApplied(f)} className="rounded bg-beacon px-3 py-1.5 text-sm font-medium text-white">Apply</button>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <Kpi label="Total incidents" value={s.total} />
-        <Kpi label="Behavior" value={s.behavior} tone="gold" />
-        <Kpi label="Accident / Medical" value={s.accidentMedical} />
-        <Kpi label="Abuse / Neglect" value={s.abuseNeglect} tone="danger" />
+        <Kpi label="Behavior" value={tCount(/behavior/i)} tone="gold" />
+        <Kpi label="Accident / Medical" value={tCount(/accident|medical/i)} />
+        <Kpi label="Abuse / Neglect" value={tCount(/abuse|neglect/i)} tone="danger" />
+        <Kpi label="Death" value={tCount(/death/i)} />
       </section>
 
       {byType.length > 0 && (
@@ -129,6 +132,22 @@ export default function Incidents() {
               <Tooltip /><Bar dataKey="c" fill="#2f6f7a" />
             </BarChart>
           </ResponsiveContainer>
+        </section>
+      )}
+
+      {byClient.length > 0 && (
+        <section className="rounded border border-border bg-white p-3">
+          <h2 className="mb-2 text-sm font-semibold">Incidents by individual
+            <span className="ml-1 font-normal text-ink-muted">(top {byClient.length} — ref id, name resolution pending)</span>
+          </h2>
+          <table className="w-full max-w-md text-left text-sm">
+            <thead className="text-xs uppercase tracking-wide text-ink-muted"><tr><th className="py-1">Individual (ref)</th><th className="py-1">Incidents</th></tr></thead>
+            <tbody>
+              {byClient.map((r) => (
+                <tr key={r.clientRef} className="border-t border-border"><td className="py-1">#{r.clientRef}</td><td className="py-1">{r.c}</td></tr>
+              ))}
+            </tbody>
+          </table>
         </section>
       )}
 
