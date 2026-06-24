@@ -8,6 +8,10 @@ const INC = 'dbo.BSL_Incident';
 const TYPE = 'dbo.BSL_Incident_TypeofIncident';
 const UDO = 'dbo.s_UserDefinedOptions';
 const LOC = 'dbo.s_Locations';
+// The incident's client = the "Individual Served", joined by Legacy EHR id (404/427).
+const CLIENT_JOIN = 'LEFT JOIN dbo.c_Client cl ON i.LegacyEHRID = cl.LegacyEHRID';
+const INITIALS = "UPPER(LEFT(LTRIM(cl.FirstName),1)) + '.' + UPPER(LEFT(LTRIM(cl.LastName),1)) + '.'";
+const udo = (col) => `(SELECT TOP 1 UDDescription FROM ${UDO} WHERE UDID = i.[${col}])`;
 
 const INCIDENT_DATE = 'CAST(i.DateofIncident AS date)';
 const MONTH = "LEFT(CONVERT(varchar(10), i.DateofIncident, 23), 7)"; // yyyy-MM
@@ -61,10 +65,10 @@ export async function incidentMetrics(f = {}) {
   await run('byPlace', `SELECT TOP 15 COALESCE(pl.UDDescription,'(none)') place, COUNT(*) c
     FROM ${INC} i LEFT JOIN ${UDO} pl ON i.LocationofIncident = pl.UDID ${clause}
     GROUP BY pl.UDDescription ORDER BY c DESC`);
-  // By individual (IndividualServedsName is a stable per-person ref; not yet name-resolved)
-  await run('byClient', `SELECT TOP 20 i.IndividualServedsName clientRef, COUNT(*) c
-    FROM ${INC} i ${clause ? clause + ' AND' : 'WHERE'} i.IndividualServedsName IS NOT NULL
-    GROUP BY i.IndividualServedsName ORDER BY c DESC`);
+  // By individual — client resolved via Legacy EHR id -> initials (de-identified)
+  await run('byClient', `SELECT TOP 20 ${INITIALS} initials, i.LegacyEHRID clientRef, COUNT(*) c
+    FROM ${INC} i ${CLIENT_JOIN} ${clause ? clause + ' AND' : 'WHERE'} i.LegacyEHRID IS NOT NULL
+    GROUP BY ${INITIALS}, i.LegacyEHRID ORDER BY c DESC`);
   return out;
 }
 
@@ -75,12 +79,14 @@ export async function queryIncidentsStructured(f = {}) {
   return c360Query(`SELECT TOP ${top}
     i.BSL_IncidentID AS IncidentId,
     ${INCIDENT_DATE} AS IncidentDate,
+    ${INITIALS} AS ClientInitials,
     ${TYPES_AGG} AS IncidentTypes,
-    sev.UDDescription AS Severity,
+    sev.UDDescription AS SeverityOfInjury,
     pl.UDDescription AS PlaceOfIncident,
     loc.LocationName AS Facility, loc.State AS State,
     CASE WHEN ISNULL(i.AbuseNeglect,0)=1 THEN 'Yes' ELSE 'No' END AS AbuseNeglect
     FROM ${INC} i
+    ${CLIENT_JOIN}
     LEFT JOIN ${UDO} sev ON i.Severity = sev.UDID
     LEFT JOIN ${UDO} pl ON i.LocationofIncident = pl.UDID
     LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
@@ -93,9 +99,24 @@ export async function getIncidentIdentified(id) {
   const rows = await c360Query(`SELECT TOP 1
     i.BSL_IncidentID AS IncidentId, ${INCIDENT_DATE} AS IncidentDate, i.TimeofIncident,
     ${TYPES_AGG} AS IncidentTypes,
-    sev.UDDescription AS Severity, pl.UDDescription AS PlaceOfIncident, i.OtherLocation,
+    cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName, cl.BirthDate AS ClientBirthDate, i.LegacyEHRID AS LegacyEhrId,
+    sev.UDDescription AS SeverityOfInjury, ${udo('AntagonistVictim')} AS AntagonistVictim,
+    pl.UDDescription AS PlaceOfIncident, i.OtherLocation,
     loc.LocationName AS Facility, loc.State AS State,
-    i.IndividualServedsName AS IndividualRef,
+    ${udo('AbuseNeglectType')} AS AbuseNeglectType, ${udo('AccidentMedicalIncidentType')} AS AccidentMedicalType,
+    ${udo('MedVarianceType')} AS MedVarianceType, ${udo('MedErrorType')} AS MedErrorType,
+    ${udo('IllnessType')} AS IllnessType, ${udo('BehaviorIncidentType')} AS BehaviorIncidentType,
+    ${udo('BehaviorCause')} AS BehaviorCause, ${udo('BehaviorDuration')} AS BehaviorDuration,
+    ${udo('BehaviorIntensity')} AS BehaviorIntensity, ${udo('BehaviorInterventions')} AS BehaviorInterventions,
+    ${udo('Outcome')} AS BehaviorOutcome, ${udo('RestraintTypeUsed')} AS RestraintType, ${udo('PhysicalAggressionType')} AS PhysicalAggressionType,
+    ${udo('InjuryType')} AS InjuryType, ${udo('InjuryLocationPrimaryAreaoftheBody')} AS InjuryAreaPrimary,
+    ${udo('InjuryLocationSpecificAreaoftheBody')} AS InjuryAreaSpecific,
+    ${udo('TreatmentProvidedBy')} AS TreatmentProvidedBy, ${udo('MedicalInterventions')} AS MedicalInterventions,
+    i.Wasseizureprotocolfollowed_ AS SeizureProtocolFollowed, ${udo('SeizureDetails')} AS SeizureDetails,
+    i.SeizureStartTime, i.SeizureEndTime,
+    i.Definedasachokingevent_ AS ChokingEvent, i.Whatdidtheindividualchokeon AS ChokedOn,
+    i.Whatwastheindividualdoingatthetimeofthechokingincident AS ChokingActivity,
+    i.Whatwasthedietfortheindividualatthetimeoftheincident AS ChokingDiet,
     i.Descriptionofwhathappenedduringtheincident AS WhatHappened,
     i.Descriptionofwheretheincidentoccurred AS WhereOccurred,
     i.Descriptionofwhentheincidentoccurred AS WhenOccurred,
@@ -108,6 +129,7 @@ export async function getIncidentIdentified(id) {
     i.BloodPressure, i.Temperature, i.HeartRate, i.Respirations, i.BloodSugar,
     i.CreatedBy_ AS ReportedBy, i.CreatedOn, i.LastModifiedOn
     FROM ${INC} i
+    ${CLIENT_JOIN}
     LEFT JOIN ${UDO} sev ON i.Severity = sev.UDID
     LEFT JOIN ${UDO} pl ON i.LocationofIncident = pl.UDID
     LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID

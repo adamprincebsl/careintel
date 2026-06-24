@@ -18,8 +18,13 @@ function Kpi({ label, value, tone, sub }) {
 }
 
 const DETAIL_SECTIONS = [
-  { title: 'Incident', keys: ['IncidentId', 'IncidentDate', 'TimeofIncident', 'IncidentTypes', 'Severity', 'PlaceOfIncident', 'OtherLocation', 'Facility', 'State', 'IndividualRef', 'Was911Called'] },
+  { title: 'Incident', keys: ['IncidentId', 'IncidentDate', 'TimeofIncident', 'ClientFirstName', 'ClientLastName', 'ClientBirthDate', 'LegacyEhrId', 'IncidentTypes', 'SeverityOfInjury', 'AntagonistVictim', 'PlaceOfIncident', 'OtherLocation', 'Facility', 'State', 'Was911Called'] },
+  { title: 'Incident type detail', keys: ['AbuseNeglectType', 'AccidentMedicalType', 'MedVarianceType', 'MedErrorType', 'IllnessType', 'BehaviorIncidentType'] },
   { title: 'What happened', keys: ['WhatHappened', 'WhereOccurred', 'WhenOccurred', 'WhyOccurred', 'HowOccurred', 'TeamRecommendations'] },
+  { title: 'Behavior', keys: ['BehaviorCause', 'BehaviorDuration', 'BehaviorIntensity', 'BehaviorInterventions', 'BehaviorOutcome', 'RestraintType', 'PhysicalAggressionType'] },
+  { title: 'Injury', keys: ['InjuryType', 'InjuryAreaPrimary', 'InjuryAreaSpecific', 'TreatmentProvidedBy', 'MedicalInterventions'] },
+  { title: 'Seizure', keys: ['SeizureProtocolFollowed', 'SeizureDetails', 'SeizureStartTime', 'SeizureEndTime'] },
+  { title: 'Choking / Ingestion', keys: ['ChokingEvent', 'ChokedOn', 'ChokingActivity', 'ChokingDiet'] },
   { title: 'Fall', keys: ['FallLocation', 'FallPreceding', 'FallContributingFactors'] },
   { title: 'Vitals', keys: ['BloodPressure', 'Temperature', 'HeartRate', 'Respirations', 'BloodSugar'] },
   { title: 'Reporting', keys: ['ReportedBy', 'CreatedOn', 'LastModifiedOn'] }
@@ -40,8 +45,18 @@ function subformEntries(row) {
 }
 const LABELS = {
   IncidentId: 'Incident #', IncidentDate: 'Date', TimeofIncident: 'Time', IncidentTypes: 'Type(s)',
-  Severity: 'Severity', PlaceOfIncident: 'Place', OtherLocation: 'Other location', Facility: 'Facility',
-  State: 'State', IndividualRef: 'Individual (ref)', Was911Called: '911 called',
+  SeverityOfInjury: 'Severity of injury', AntagonistVictim: 'Antagonist / victim',
+  ClientFirstName: 'First name', ClientLastName: 'Last name', ClientBirthDate: 'Date of birth', LegacyEhrId: 'Legacy EHR ID',
+  PlaceOfIncident: 'Place', OtherLocation: 'Other location', Facility: 'Facility',
+  State: 'State', Was911Called: '911 called',
+  AbuseNeglectType: 'Abuse/Neglect type', AccidentMedicalType: 'Accident/Medical type', MedVarianceType: 'Med variance type',
+  MedErrorType: 'Med error type', IllnessType: 'Illness type', BehaviorIncidentType: 'Behavior incident type',
+  BehaviorCause: 'Cause', BehaviorDuration: 'Duration', BehaviorIntensity: 'Intensity', BehaviorInterventions: 'Interventions',
+  BehaviorOutcome: 'Outcome', RestraintType: 'Restraint type', PhysicalAggressionType: 'Physical aggression type',
+  InjuryType: 'Injury type', InjuryAreaPrimary: 'Injury area (primary)', InjuryAreaSpecific: 'Injury area (specific)',
+  TreatmentProvidedBy: 'Treatment provided by', MedicalInterventions: 'Medical interventions',
+  SeizureProtocolFollowed: 'Seizure protocol followed', SeizureDetails: 'Seizure details', SeizureStartTime: 'Seizure start', SeizureEndTime: 'Seizure end',
+  ChokingEvent: 'Choking event?', ChokedOn: 'Choked on', ChokingActivity: 'Activity at time', ChokingDiet: 'Diet at time',
   WhatHappened: 'What happened', WhereOccurred: 'Where', WhenOccurred: 'When', WhyOccurred: 'Why',
   HowOccurred: 'How', TeamRecommendations: 'Team recommendations',
   FallLocation: 'Where the fall occurred', FallPreceding: 'Immediately preceding the fall', FallContributingFactors: 'Contributing factors',
@@ -138,13 +153,13 @@ export default function Incidents() {
       {byClient.length > 0 && (
         <section className="rounded border border-border bg-white p-3">
           <h2 className="mb-2 text-sm font-semibold">Incidents by individual
-            <span className="ml-1 font-normal text-ink-muted">(top {byClient.length} — ref id, name resolution pending)</span>
+            <span className="ml-1 font-normal text-ink-muted">(top {byClient.length}, de-identified)</span>
           </h2>
           <table className="w-full max-w-md text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-ink-muted"><tr><th className="py-1">Individual (ref)</th><th className="py-1">Incidents</th></tr></thead>
+            <thead className="text-xs uppercase tracking-wide text-ink-muted"><tr><th className="py-1">Individual</th><th className="py-1">Incidents</th></tr></thead>
             <tbody>
               {byClient.map((r) => (
-                <tr key={r.clientRef} className="border-t border-border"><td className="py-1">#{r.clientRef}</td><td className="py-1">{r.c}</td></tr>
+                <tr key={r.clientRef} className="border-t border-border"><td className="py-1">{r.initials || `#${r.clientRef}`}</td><td className="py-1">{r.c}</td></tr>
               ))}
             </tbody>
           </table>
@@ -154,15 +169,16 @@ export default function Incidents() {
       <section className="overflow-x-auto rounded border border-border bg-white">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
-            <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Type(s)</th><th className="px-3 py-2">Severity</th><th className="px-3 py-2">Place</th><th className="px-3 py-2">Facility</th><th className="px-3 py-2">State</th><th className="px-3 py-2">A/N</th><th className="px-3 py-2"></th></tr>
+            <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Type(s)</th><th className="px-3 py-2">Inj. severity</th><th className="px-3 py-2">Place</th><th className="px-3 py-2">Facility</th><th className="px-3 py-2">State</th><th className="px-3 py-2">A/N</th><th className="px-3 py-2"></th></tr>
           </thead>
           <tbody>
-            {list && !list.rows?.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={8}>No incidents for these filters.</td></tr>}
+            {list && !list.rows?.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={9}>No incidents for these filters.</td></tr>}
             {(list?.rows || []).map((r) => (
               <tr key={r.IncidentId} className="border-t border-border hover:bg-surface/50">
                 <td className="px-3 py-1.5">{fmt(r.IncidentDate)}</td>
+                <td className="px-3 py-1.5">{r.ClientInitials || '—'}</td>
                 <td className="px-3 py-1.5">{r.IncidentTypes || '—'}</td>
-                <td className="px-3 py-1.5">{r.Severity || '—'}</td>
+                <td className="px-3 py-1.5">{r.SeverityOfInjury || '—'}</td>
                 <td className="px-3 py-1.5">{r.PlaceOfIncident || '—'}</td>
                 <td className="px-3 py-1.5">{r.Facility || '—'}</td>
                 <td className="px-3 py-1.5">{r.State || '—'}</td>
