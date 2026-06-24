@@ -62,6 +62,7 @@ export const api = {
   incMetrics: (qs) => getJson('/api/c360/incidents/metrics' + (qs ? `?${qs}` : '')),
   incList: (qs) => getJson('/api/c360/incidents/list' + (qs ? `?${qs}` : '')),
   incFull: (id) => getJson(`/api/c360/incidents/${encodeURIComponent(id)}/full`),
+  clientDoc: (id) => getJson(`/api/c360/client/${encodeURIComponent(id)}/documentation`),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),

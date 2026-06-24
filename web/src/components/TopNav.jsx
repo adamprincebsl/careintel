@@ -43,6 +43,11 @@ export default function TopNav() {
               <AlertTriangle className="h-4 w-4" /> Incidents
             </NavLink>
           )}
+          {can(user, 'note.viewPhi') && (
+            <NavLink to="/c360/client" className={navClass}>
+              <UserSearch className="h-4 w-4" /> Client
+            </NavLink>
+          )}
           {can(user, 'c360.query') && (
             <NavLink to="/c360/explore" className={navClass}>
               <Database className="h-4 w-4" /> Explore

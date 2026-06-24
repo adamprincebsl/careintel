@@ -29,6 +29,18 @@ function buildWhere(f = {}) {
     conds.push(`EXISTS (SELECT 1 FROM ${TYPE} t WHERE t.BSL_IncidentID = i.BSL_IncidentID AND t.TypeofIncident = @typ)`);
     params.typ = parseInt(f.type, 10);
   }
+  if (f.state) {
+    conds.push(`i.HomeFacility IN (SELECT LocationID FROM ${LOC} WHERE State = @state)`);
+    params.state = f.state;
+  }
+  if (f.program) {
+    conds.push(`EXISTS (SELECT 1 FROM dbo.c_Client cl2
+      JOIN dbo.c_ClientProgram cp ON cp.CaseID = cl2.ClientID
+      JOIN dbo.s_Program pr ON cp.ProgramID = pr.ProgramID
+      JOIN dbo.s_ProgramType pt ON pr.ProgramTypeID = pt.ProgramTypeID
+      WHERE cl2.LegacyEHRID = i.LegacyEHRID AND pt.ProgramType = @program)`);
+    params.program = f.program;
+  }
   return { clause: conds.length ? 'WHERE ' + conds.join(' AND ') : '', params };
 }
 
@@ -41,7 +53,12 @@ export async function incidentFilterOptions() {
   const facilities = await c360Query(`SELECT DISTINCT loc.LocationID id, loc.LocationName name
     FROM ${INC} i JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
     WHERE loc.LocationName IS NOT NULL ORDER BY loc.LocationName`).catch(() => []);
-  return { types: types.map(m), severities: severities.map(m), facilities: facilities.map(m) };
+  const states = await c360Query(`SELECT DISTINCT loc.State id, loc.State name
+    FROM ${INC} i JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
+    WHERE loc.State IS NOT NULL ORDER BY loc.State`).catch(() => []);
+  const programs = await c360Query(`SELECT DISTINCT pt.ProgramType id, pt.ProgramType name
+    FROM dbo.s_ProgramType pt WHERE pt.ProgramType IS NOT NULL ORDER BY pt.ProgramType`).catch(() => []);
+  return { types: types.map(m), severities: severities.map(m), facilities: facilities.map(m), states: states.map(m), programs: programs.map(m) };
 }
 
 export async function incidentMetrics(f = {}) {
@@ -75,7 +92,7 @@ export async function incidentMetrics(f = {}) {
 // De-identified list (no narrative, no client identity) — reporting.
 export async function queryIncidentsStructured(f = {}) {
   const { clause, params } = buildWhere(f);
-  const top = Math.min(parseInt(f.top, 10) || 200, 1000);
+  const top = Math.min(parseInt(f.top, 10) || 1000, 5000);
   return c360Query(`SELECT TOP ${top}
     i.BSL_IncidentID AS IncidentId,
     ${INCIDENT_DATE} AS IncidentDate,
@@ -99,7 +116,7 @@ export async function getIncidentIdentified(id) {
   const rows = await c360Query(`SELECT TOP 1
     i.BSL_IncidentID AS IncidentId, ${INCIDENT_DATE} AS IncidentDate, i.TimeofIncident,
     ${TYPES_AGG} AS IncidentTypes,
-    cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName, cl.BirthDate AS ClientBirthDate, i.LegacyEHRID AS LegacyEhrId,
+    cl.ClientID AS ClientId, cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName, cl.BirthDate AS ClientBirthDate,
     sev.UDDescription AS SeverityOfInjury, ${udo('AntagonistVictim')} AS AntagonistVictim,
     pl.UDDescription AS PlaceOfIncident, i.OtherLocation,
     loc.LocationName AS Facility, loc.State AS State,

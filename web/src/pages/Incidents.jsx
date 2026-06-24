@@ -18,7 +18,7 @@ function Kpi({ label, value, tone, sub }) {
 }
 
 const DETAIL_SECTIONS = [
-  { title: 'Incident', keys: ['IncidentId', 'IncidentDate', 'TimeofIncident', 'ClientFirstName', 'ClientLastName', 'ClientBirthDate', 'LegacyEhrId', 'IncidentTypes', 'SeverityOfInjury', 'AntagonistVictim', 'PlaceOfIncident', 'OtherLocation', 'Facility', 'State', 'Was911Called'] },
+  { title: 'Incident', keys: ['IncidentId', 'IncidentDate', 'TimeofIncident', 'ClientId', 'ClientFirstName', 'ClientLastName', 'ClientBirthDate', 'IncidentTypes', 'SeverityOfInjury', 'AntagonistVictim', 'PlaceOfIncident', 'OtherLocation', 'Facility', 'State', 'Was911Called'] },
   { title: 'Incident type detail', keys: ['AbuseNeglectType', 'AccidentMedicalType', 'MedVarianceType', 'MedErrorType', 'IllnessType', 'BehaviorIncidentType'] },
   { title: 'What happened', keys: ['WhatHappened', 'WhereOccurred', 'WhenOccurred', 'WhyOccurred', 'HowOccurred', 'TeamRecommendations'] },
   { title: 'Behavior', keys: ['BehaviorCause', 'BehaviorDuration', 'BehaviorIntensity', 'BehaviorInterventions', 'BehaviorOutcome', 'RestraintType', 'PhysicalAggressionType'] },
@@ -46,7 +46,7 @@ function subformEntries(row) {
 const LABELS = {
   IncidentId: 'Incident #', IncidentDate: 'Date', TimeofIncident: 'Time', IncidentTypes: 'Type(s)',
   SeverityOfInjury: 'Severity of injury', AntagonistVictim: 'Antagonist / victim',
-  ClientFirstName: 'First name', ClientLastName: 'Last name', ClientBirthDate: 'Date of birth', LegacyEhrId: 'Legacy EHR ID',
+  ClientId: 'Client ID (EHR)', ClientFirstName: 'First name', ClientLastName: 'Last name', ClientBirthDate: 'Date of birth',
   PlaceOfIncident: 'Place', OtherLocation: 'Other location', Facility: 'Facility',
   State: 'State', Was911Called: '911 called',
   AbuseNeglectType: 'Abuse/Neglect type', AccidentMedicalType: 'Accident/Medical type', MedVarianceType: 'Med variance type',
@@ -78,7 +78,7 @@ function fmt(v) {
 export default function Incidents() {
   const { user } = useAuth();
   const canPhi = can(user, 'note.viewPhi');
-  const [f, setF] = useState({ type: '', severity: '', facility: '', from: '', to: '' });
+  const [f, setF] = useState({ type: '', severity: '', facility: '', state: '', program: '', from: '', to: '' });
   const [applied, setApplied] = useState(f);
   const [selected, setSelected] = useState(null);
 
@@ -115,10 +115,22 @@ export default function Incidents() {
             {(opts?.severities || []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
-        <label className="text-xs text-ink-muted">Facility
+        <label className="text-xs text-ink-muted">State
+          <select value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })} className="mt-1 block w-28 rounded border border-border px-2 py-1 text-sm">
+            <option value="">All</option>
+            {(opts?.states || []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-ink-muted">Location (facility)
           <select value={f.facility} onChange={(e) => setF({ ...f, facility: e.target.value })} className="mt-1 block w-48 rounded border border-border px-2 py-1 text-sm">
             <option value="">All facilities</option>
             {(opts?.facilities || []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-ink-muted">Program
+          <select value={f.program} onChange={(e) => setF({ ...f, program: e.target.value })} className="mt-1 block w-40 rounded border border-border px-2 py-1 text-sm">
+            <option value="">All programs</option>
+            {(opts?.programs || []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </label>
         <label className="text-xs text-ink-muted">From

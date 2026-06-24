@@ -17,7 +17,8 @@ const NO_STORE = { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Prag
 const filtersFrom = (q) => ({
   from: q.get('from') ?? undefined, to: q.get('to') ?? undefined,
   type: q.get('type') ?? undefined, severity: q.get('severity') ?? undefined,
-  facility: q.get('facility') ?? undefined, top: q.get('top') ?? undefined
+  facility: q.get('facility') ?? undefined, state: q.get('state') ?? undefined,
+  program: q.get('program') ?? undefined, top: q.get('top') ?? undefined
 });
 const fail = (context, err) => {
   context.warn(`incident endpoint failed: ${err.message}`);
