@@ -81,6 +81,8 @@ export default function Incidents() {
   const [f, setF] = useState({ type: '', severity: '', facility: '', state: '', program: '', from: '', to: '' });
   const [applied, setApplied] = useState(f);
   const [selected, setSelected] = useState(null);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
 
   const { data: opts } = useQuery({ queryKey: ['inc-options'], queryFn: api.incOptions });
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v)).toString();
@@ -94,6 +96,9 @@ export default function Incidents() {
   const byType = metrics?.byType || [];
   const byClient = metrics?.byClient || [];
   const tCount = (re) => { const m = byType.find((t) => re.test(t.label || '')); return m ? m.c : 0; };
+  const allRows = list?.rows || [];
+  const pageRows = allRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(allRows.length / PAGE_SIZE));
 
   return (
     <div className="space-y-4">
@@ -139,7 +144,7 @@ export default function Incidents() {
         <label className="text-xs text-ink-muted">To
           <input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className="mt-1 block rounded border border-border px-2 py-1 text-sm" />
         </label>
-        <button onClick={() => setApplied(f)} className="rounded bg-beacon px-3 py-1.5 text-sm font-medium text-white">Apply</button>
+        <button onClick={() => { setApplied(f); setPage(0); }} className="rounded bg-beacon px-3 py-1.5 text-sm font-medium text-white">Apply</button>
       </section>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -184,8 +189,8 @@ export default function Incidents() {
             <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Type(s)</th><th className="px-3 py-2">Inj. severity</th><th className="px-3 py-2">Place</th><th className="px-3 py-2">Facility</th><th className="px-3 py-2">State</th><th className="px-3 py-2">A/N</th><th className="px-3 py-2"></th></tr>
           </thead>
           <tbody>
-            {list && !list.rows?.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={9}>No incidents for these filters.</td></tr>}
-            {(list?.rows || []).map((r) => (
+            {list && !allRows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={9}>No incidents for these filters.</td></tr>}
+            {pageRows.map((r) => (
               <tr key={r.IncidentId} className="border-t border-border hover:bg-surface/50">
                 <td className="px-3 py-1.5">{fmt(r.IncidentDate)}</td>
                 <td className="px-3 py-1.5">{r.ClientInitials || '—'}</td>
@@ -202,6 +207,20 @@ export default function Incidents() {
             ))}
           </tbody>
         </table>
+        {allRows.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between border-t border-border px-3 py-2 text-sm">
+            <span className="text-ink-muted">
+              {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, allRows.length)} of {allRows.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <button disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="rounded border border-border px-2 py-1 disabled:opacity-40">Prev</button>
+              <span className="text-ink-muted">Page {page + 1} / {pageCount}</span>
+              <button disabled={page + 1 >= pageCount} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                className="rounded border border-border px-2 py-1 disabled:opacity-40">Next</button>
+            </div>
+          </div>
+        )}
       </section>
 
       {selected && (
