@@ -14,6 +14,7 @@ import C360Explore from './pages/C360Explore';
 import ResidentialNotes from './pages/ResidentialNotes';
 import Incidents from './pages/Incidents';
 import ClientView from './pages/ClientView';
+import IncidentCompliance from './pages/IncidentCompliance';
 
 export default function App() {
   const { loading, error, user } = useAuth();
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/c360" element={<C360Reports />} />
           <Route path="/c360/residential" element={<ResidentialNotes />} />
           <Route path="/c360/incidents" element={<Incidents />} />
+          <Route path="/c360/incident-compliance" element={<IncidentCompliance />} />
           <Route path="/c360/client" element={<ClientView />} />
           <Route path="/c360/explore" element={<C360Explore />} />
           <Route path="/clients" element={<ClientDetail />} />

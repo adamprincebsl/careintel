@@ -63,6 +63,12 @@ export const api = {
   incList: (qs) => getJson('/api/c360/incidents/list' + (qs ? `?${qs}` : '')),
   incFull: (id) => getJson(`/api/c360/incidents/${encodeURIComponent(id)}/full`),
   clientDoc: (id) => getJson(`/api/c360/client/${encodeURIComponent(id)}/documentation`),
+  // Incident workflow (tasks in app Cosmos) + compliance signals
+  incTasks: (id) => getJson(`/api/c360/incidents/${encodeURIComponent(id)}/tasks`),
+  incTaskCreate: (id, body) => postJson(`/api/c360/incidents/${encodeURIComponent(id)}/tasks`, body),
+  incTaskUpdate: (id, taskId, body) => putJson(`/api/c360/incidents/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, body),
+  incTaskDelete: (id, taskId) => fetch(`/api/c360/incidents/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' }).then((r) => r.json()),
+  incCompliance: () => getJson('/api/c360/incidents/compliance'),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),

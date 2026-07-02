@@ -5,6 +5,7 @@ import { AlertTriangle, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
+import IncidentWorkflow from '../components/IncidentWorkflow';
 
 function Kpi({ label, value, tone, sub }) {
   const tones = { success: 'text-success', gold: 'text-gold-dark', danger: 'text-danger' };
@@ -292,6 +293,8 @@ export default function Incidents() {
                     </div>
                   );
                 })()}
+
+                <IncidentWorkflow incidentId={selected} />
               </div>
             )}
           </div>

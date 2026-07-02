@@ -167,6 +167,50 @@ const SUBFORMS = [
   ['supervisorFollowUp', 'BSL_IncidentSupervisorFollowUpTwo'],
   ['qaFollowUp', 'BSL_IncidentQaFollowUp']
 ];
+// Which follow-on sub-forms already exist in c360 for this incident (auto-derived
+// workflow status — the app doesn't track these lanes, it reflects them).
+export async function getIncidentWorkflowStatus(id) {
+  const iid = parseInt(id, 10);
+  const exists = async (tbl) => ((await c360Query(`SELECT TOP 1 1 x FROM dbo.${tbl} WHERE BSL_IncidentID = @id`, { id: iid }).catch(() => [])).length > 0);
+  return {
+    rootCauseOnFile: await exists('BSL_IncidentRootCauseAnalysis'),
+    correctiveActionOnFile: await exists('BSL_IncidentCorrectiveActionPlan'),
+    qaOnFile: await exists('BSL_IncidentQaFollowUp'),
+    supervisorFollowUpOnFile: await exists('BSL_IncidentSupervisorFollowUpTwo'),
+    clinicalDebriefOnFile: await exists('BSLPA_IncidentClinicalDebriefTwo'),
+    notified: await exists('BSL_IncidentNotificationLog')
+  };
+}
+
+// Compliance signals from c360 (the app layer adds overdue-task signals separately).
+export async function incidentComplianceSignals() {
+  const out = {};
+  const run = async (k, sql) => { try { out[k] = await c360Query(sql); } catch (e) { out[k] = { error: e.message }; } };
+  // Serious / reportable (serious injury, Death, or Abuse-Neglect) with no root cause on file.
+  await run('missingRootCause', `SELECT TOP 100 i.BSL_IncidentID id, ${INCIDENT_DATE} date,
+      ${INITIALS} client, sev.UDDescription severity, loc.LocationName facility
+    FROM ${INC} i ${CLIENT_JOIN}
+    LEFT JOIN ${UDO} sev ON i.Severity = sev.UDID
+    LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
+    WHERE (sev.UDDescription LIKE '%Serious%'
+        OR EXISTS (SELECT 1 FROM ${TYPE} t JOIN ${UDO} u ON t.TypeofIncident=u.UDID
+                   WHERE t.BSL_IncidentID=i.BSL_IncidentID AND (u.UDDescription LIKE '%Death%' OR u.UDDescription LIKE '%Abuse%')))
+      AND NOT EXISTS (SELECT 1 FROM dbo.BSL_IncidentRootCauseAnalysis r WHERE r.BSL_IncidentID = i.BSL_IncidentID)
+    ORDER BY i.DateofIncident DESC`);
+  // Recent incidents with no notification logged.
+  await run('noNotification', `SELECT TOP 100 i.BSL_IncidentID id, ${INCIDENT_DATE} date, ${INITIALS} client, loc.LocationName facility
+    FROM ${INC} i ${CLIENT_JOIN} LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
+    WHERE i.DateofIncident >= DATEADD(day, -90, CAST(GETUTCDATE() AS date))
+      AND NOT EXISTS (SELECT 1 FROM dbo.BSL_IncidentNotificationLog n WHERE n.BSL_IncidentID = i.BSL_IncidentID)
+    ORDER BY i.DateofIncident DESC`);
+  // High-frequency individuals (last 90 days).
+  await run('highFrequency', `SELECT TOP 15 ${INITIALS} client, i.LegacyEHRID clientRef, COUNT(*) c
+    FROM ${INC} i ${CLIENT_JOIN}
+    WHERE i.DateofIncident >= DATEADD(day, -90, CAST(GETUTCDATE() AS date)) AND i.LegacyEHRID IS NOT NULL
+    GROUP BY ${INITIALS}, i.LegacyEHRID HAVING COUNT(*) >= 2 ORDER BY c DESC`);
+  return out;
+}
+
 export async function getIncidentSubforms(id) {
   const iid = parseInt(id, 10);
   const out = {};

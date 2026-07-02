@@ -32,6 +32,7 @@ export const PERMISSIONS = {
   'client.viewInitials': 'View client initials + program context (de-identified)',
   'client.viewDwLink': 'Follow the approved link-back to the full client record in the data warehouse',
   'note.viewPhi': 'View the full identified clinical note (PHI) for clients in scope',
+  'incident.manage': 'Create and update incident workflow tasks (root cause, medical, clinical, operational, follow-up)',
 
   // c360 build-out tooling — read-only query console (may surface PHI; audited)
   'c360.query': 'Run read-only c360 queries in the Explorer (build-out tool)',
