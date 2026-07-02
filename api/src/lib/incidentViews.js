@@ -211,6 +211,24 @@ export async function incidentComplianceSignals() {
   return out;
 }
 
+// Data needed to pre-fill the Michigan BCAL-4607 incident/accident report.
+export async function getIncidentBcal4607Data(id) {
+  const rows = await c360Query(`SELECT TOP 1
+      i.BSL_IncidentID AS id, i.DateofIncident, i.TimeofIncident,
+      cl.FirstName, cl.LastName,
+      cl.Address1 AS clientAddr, cl.City AS clientCity, cl.State AS clientState, cl.ZipCode AS clientZip,
+      loc.LocationName AS facilityName, loc.Address1 AS facilityAddr, loc.City AS facilityCity,
+      loc.State AS facilityState, loc.ZipCode AS facilityZip, loc.Phone AS facilityPhone,
+      COALESCE(loc.OperatingCertificateNumber, loc.ProviderNumber) AS licenseNumber,
+      (SELECT TOP 1 UDDescription FROM ${UDO} WHERE UDID = i.LocationofIncident) AS placeOfIncident,
+      i.Descriptionofwhathappenedduringtheincident AS whatHappened,
+      i.CreatedBy_ AS reportedBy, i.CreatedOn
+    FROM ${INC} i ${CLIENT_JOIN}
+    LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
+    WHERE i.BSL_IncidentID = @id`, { id: parseInt(id, 10) });
+  return rows[0] || null;
+}
+
 // ---- Rules engine -----------------------------------------------------------
 // Rules are stored in the app's Cosmos; each condition maps to a SAFE, fixed SQL
 // fragment (values always parameterized). A rule matches incidents where ALL its

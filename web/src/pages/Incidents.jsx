@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X, FileDown } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
@@ -67,6 +67,17 @@ const LABELS = {
   CreatedOn: 'Created on', LastModifiedOn: 'Last modified'
 };
 const LONG = new Set(['WhatHappened', 'WhereOccurred', 'WhenOccurred', 'WhyOccurred', 'HowOccurred', 'TeamRecommendations', 'FallPreceding', 'FallContributingFactors']);
+const isMichigan = (s) => { const v = String(s || '').trim().toLowerCase(); return v === 'mi' || v === 'michigan'; };
+async function downloadBcal4607(id) {
+  const res = await fetch(`/api/c360/incidents/${id}/pdf/bcal4607`);
+  if (!res.ok) { const t = await res.text().catch(() => ''); alert(`Couldn’t generate the form: ${res.status} ${t}`); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `BCAL-4607-incident-${id}.pdf`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 function fmt(v) {
   if (v == null || v === '') return null;
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
@@ -237,7 +248,15 @@ export default function Incidents() {
             {dFetch && <p className="text-sm text-ink-muted">Loading…</p>}
             {detail?.incident && (
               <div className="space-y-4">
-                <div className="rounded border border-gold bg-gold-tint px-3 py-1.5 text-xs text-gold-dark">Identified incident (PHI) — access is audited.</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="rounded border border-gold bg-gold-tint px-3 py-1.5 text-xs text-gold-dark">Identified incident (PHI) — access is audited.</div>
+                  {isMichigan(detail.incident.State) && (
+                    <button onClick={() => downloadBcal4607(selected)}
+                      className="flex shrink-0 items-center gap-1.5 rounded bg-beacon px-3 py-1.5 text-xs font-medium text-white hover:bg-beacon/90">
+                      <FileDown className="h-4 w-4" /> BCAL-4607 (MI)
+                    </button>
+                  )}
+                </div>
                 {DETAIL_SECTIONS.map((sec) => {
                   const present = sec.keys.filter((k) => fmt(detail.incident[k]) != null);
                   if (!present.length) return null;
