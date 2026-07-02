@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
 import NoteForm from '../components/NoteForm';
+import ComplianceTabs from '../components/ComplianceTabs';
 
 // Residential Notes reporting page. Filters → KPIs (documented vs pending, time
 // charted) → activity metrics (community engagement, day-living/ADLs, home
@@ -62,6 +63,7 @@ export default function ResidentialNotes() {
 
   return (
     <div className="space-y-5">
+      <ComplianceTabs />
       <div className="flex items-center gap-2">
         <ClipboardList className="h-5 w-5 text-beacon" />
         <h1 className="text-xl font-semibold">Residential Notes</h1>

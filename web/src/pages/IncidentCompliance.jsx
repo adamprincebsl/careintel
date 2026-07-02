@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ShieldAlert } from 'lucide-react';
 import { api } from '../lib/api';
+import ComplianceTabs from '../components/ComplianceTabs';
 
 const fmtDate = (v) => (v ? new Date(v).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—');
 
@@ -24,6 +25,7 @@ export default function IncidentCompliance() {
 
   return (
     <div className="space-y-4">
+      <ComplianceTabs />
       <div className="flex items-center gap-2">
         <ShieldAlert className="h-5 w-5 text-beacon" />
         <h1 className="text-xl font-semibold">Incident Compliance</h1>

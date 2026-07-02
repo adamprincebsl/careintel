@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
 import IncidentWorkflow from '../components/IncidentWorkflow';
+import ComplianceTabs from '../components/ComplianceTabs';
 
 function Kpi({ label, value, tone, sub }) {
   const tones = { success: 'text-success', gold: 'text-gold-dark', danger: 'text-danger' };
@@ -103,6 +104,7 @@ export default function Incidents() {
 
   return (
     <div className="space-y-4">
+      <ComplianceTabs />
       <div className="flex items-center gap-2">
         <AlertTriangle className="h-5 w-5 text-beacon" />
         <h1 className="text-xl font-semibold">Incidents</h1>

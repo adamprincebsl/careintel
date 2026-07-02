@@ -1,17 +1,22 @@
-import { NavLink } from 'react-router-dom';
-import { BarChart3, MessageSquareText, Sparkles, UserSearch, Settings, Database, ClipboardList, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { BarChart3, Sparkles, UserSearch, Settings, Database, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
 
 const linkBase = 'flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors';
+const on = 'bg-white/15 text-white';
+const off = 'text-white/80 hover:bg-white/10 hover:text-white';
+const navClass = ({ isActive }) => `${linkBase} ${isActive ? on : off}`;
 
-function navClass({ isActive }) {
-  return `${linkBase} ${isActive ? 'bg-white/15 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'}`;
-}
+// Compliance is a module spanning several routes; highlight it across all of them.
+const COMPLIANCE_RE = /^\/c360(\/(incidents|incident-compliance|residential))?$/;
 
 export default function TopNav() {
   const { user, settings } = useAuth();
   const features = settings?.features || {};
+  const { pathname } = useLocation();
+  const complianceActive = COMPLIANCE_RE.test(pathname);
+
   return (
     <header className="bg-beacon text-white shadow">
       <div className="mx-auto flex max-w-7xl items-center gap-6 px-4 py-3">
@@ -25,26 +30,11 @@ export default function TopNav() {
           </NavLink>
           {features.assistant !== false && (
             <NavLink to="/assistant" className={navClass}>
-              <MessageSquareText className="h-4 w-4" /> Assistant
+              <Sparkles className="h-4 w-4" /> Insights
             </NavLink>
           )}
           {features.c360 !== false && can(user, 'report.view') && (
-            <NavLink to="/c360" className={navClass}>
-              <Database className="h-4 w-4" /> c360
-            </NavLink>
-          )}
-          {features.c360 !== false && can(user, 'report.view') && (
-            <NavLink to="/c360/residential" className={navClass}>
-              <ClipboardList className="h-4 w-4" /> Res Notes
-            </NavLink>
-          )}
-          {features.c360 !== false && can(user, 'report.view') && (
-            <NavLink to="/c360/incidents" className={navClass}>
-              <AlertTriangle className="h-4 w-4" /> Incidents
-            </NavLink>
-          )}
-          {features.c360 !== false && can(user, 'report.view') && (
-            <NavLink to="/c360/incident-compliance" className={navClass}>
+            <NavLink to="/c360/incidents" className={`${linkBase} ${complianceActive ? on : off}`}>
               <ShieldAlert className="h-4 w-4" /> Compliance
             </NavLink>
           )}
@@ -56,11 +46,6 @@ export default function TopNav() {
           {can(user, 'c360.query') && (
             <NavLink to="/c360/explore" className={navClass}>
               <Database className="h-4 w-4" /> Explore
-            </NavLink>
-          )}
-          {can(user, 'client.viewInitials') && (
-            <NavLink to="/clients" className={navClass}>
-              <UserSearch className="h-4 w-4" /> Clients
             </NavLink>
           )}
           {can(user, 'admin.manage') && (
