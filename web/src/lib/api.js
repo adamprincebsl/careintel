@@ -69,6 +69,11 @@ export const api = {
   incTaskUpdate: (id, taskId, body) => putJson(`/api/c360/incidents/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, body),
   incTaskDelete: (id, taskId) => fetch(`/api/c360/incidents/${encodeURIComponent(id)}/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' }).then((r) => r.json()),
   incCompliance: () => getJson('/api/c360/incidents/compliance'),
+  incRules: () => getJson('/api/c360/incidents/rules'),
+  incRuleCreate: (body) => postJson('/api/c360/incidents/rules', body),
+  incRuleUpdate: (id, body) => putJson(`/api/c360/incidents/rules/${encodeURIComponent(id)}`, body),
+  incRuleDelete: (id) => fetch(`/api/c360/incidents/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }).then((r) => r.json()),
+  incRulesEvaluate: () => getJson('/api/c360/incidents/rules/evaluate'),
   // App settings / feature flags
   settings: () => getJson('/api/settings'),
   saveSettings: (patch) => putJson('/api/admin/settings', patch),

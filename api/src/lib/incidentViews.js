@@ -211,6 +211,59 @@ export async function incidentComplianceSignals() {
   return out;
 }
 
+// ---- Rules engine -----------------------------------------------------------
+// Rules are stored in the app's Cosmos; each condition maps to a SAFE, fixed SQL
+// fragment (values always parameterized). A rule matches incidents where ALL its
+// conditions hold. Catalog is closed — no arbitrary SQL from the client.
+export const RULE_CONDITIONS = {
+  severityContains: { label: 'Severity contains', value: 'text' },
+  hasType: { label: 'Has incident type', value: 'text' },
+  stateEquals: { label: 'State is', value: 'text' },
+  facilityEquals: { label: 'Facility id is', value: 'int' },
+  olderThanDays: { label: 'Incident older than (days)', value: 'int' },
+  missingRootCause: { label: 'Missing Root Cause Analysis', value: 'none' },
+  missingNotification: { label: 'Missing Notification log', value: 'none' },
+  missingCorrectiveAction: { label: 'Missing Corrective Action Plan', value: 'none' }
+};
+
+function buildRuleWhere(conditions = []) {
+  const parts = [], params = {};
+  conditions.forEach((c, idx) => {
+    const p = `@c${idx}`, key = `c${idx}`;
+    switch (c.type) {
+      case 'severityContains':
+        parts.push(`(SELECT TOP 1 UDDescription FROM ${UDO} WHERE UDID = i.Severity) LIKE ${p}`); params[key] = `%${c.value}%`; break;
+      case 'hasType':
+        parts.push(`EXISTS (SELECT 1 FROM ${TYPE} t JOIN ${UDO} u ON t.TypeofIncident = u.UDID WHERE t.BSL_IncidentID = i.BSL_IncidentID AND u.UDDescription LIKE ${p})`); params[key] = `%${c.value}%`; break;
+      case 'stateEquals':
+        parts.push(`i.HomeFacility IN (SELECT LocationID FROM ${LOC} WHERE State = ${p})`); params[key] = c.value; break;
+      case 'facilityEquals':
+        parts.push(`i.HomeFacility = ${p}`); params[key] = parseInt(c.value, 10); break;
+      case 'olderThanDays':
+        parts.push(`DATEDIFF(day, i.DateofIncident, GETUTCDATE()) >= ${p}`); params[key] = parseInt(c.value, 10); break;
+      case 'missingRootCause':
+        parts.push(`NOT EXISTS (SELECT 1 FROM dbo.BSL_IncidentRootCauseAnalysis r WHERE r.BSL_IncidentID = i.BSL_IncidentID)`); break;
+      case 'missingNotification':
+        parts.push(`NOT EXISTS (SELECT 1 FROM dbo.BSL_IncidentNotificationLog n WHERE n.BSL_IncidentID = i.BSL_IncidentID)`); break;
+      case 'missingCorrectiveAction':
+        parts.push(`NOT EXISTS (SELECT 1 FROM dbo.BSL_IncidentCorrectiveActionPlan cap WHERE cap.BSL_IncidentID = i.BSL_IncidentID)`); break;
+      default: break; // unknown condition types are ignored
+    }
+  });
+  return { where: parts.length ? 'WHERE ' + parts.join(' AND ') : '', params };
+}
+
+export async function evaluateRule(rule) {
+  const { where, params } = buildRuleWhere(rule.conditions || []);
+  const rows = await c360Query(`SELECT TOP 200 i.BSL_IncidentID id, ${INCIDENT_DATE} date, ${INITIALS} client,
+      sev.UDDescription severity, loc.LocationName facility
+    FROM ${INC} i ${CLIENT_JOIN}
+    LEFT JOIN ${UDO} sev ON i.Severity = sev.UDID
+    LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
+    ${where} ORDER BY i.DateofIncident DESC`, params);
+  return { matchCount: rows.length, matches: rows.slice(0, 50) };
+}
+
 export async function getIncidentSubforms(id) {
   const iid = parseInt(id, 10);
   const out = {};

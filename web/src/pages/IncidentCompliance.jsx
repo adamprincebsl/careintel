@@ -20,8 +20,11 @@ function Panel({ title, count, tone, children }) {
 
 export default function IncidentCompliance() {
   const { data, isFetching, error } = useQuery({ queryKey: ['inc-compliance'], queryFn: api.incCompliance });
+  const { data: ruleEval } = useQuery({ queryKey: ['inc-rules-eval'], queryFn: api.incRulesEvaluate });
   const d = data || {};
   const rows = (x) => (Array.isArray(x) ? x : []);
+  const ruleResults = (ruleEval?.results || []).filter((r) => r.matchCount > 0);
+  const toneFor = (p) => (p === 'critical' ? 'danger' : p === 'info' ? 'beacon' : 'gold');
 
   return (
     <div className="space-y-4">
@@ -32,6 +35,22 @@ export default function IncidentCompliance() {
       </div>
       {error && <p className="text-sm text-danger">{String(error.message)}</p>}
       {isFetching && <p className="text-sm text-ink-muted">Loading…</p>}
+
+      {ruleResults.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {ruleResults.map((r) => (
+            <Panel key={r.id} title={`Rule: ${r.name}`} count={r.matchCount} tone={toneFor(r.priority)}>
+              {r.message && <p className="px-1 pb-1 text-xs italic text-ink-muted">{r.message}</p>}
+              {(r.matches || []).map((m) => (
+                <div key={m.id} className="flex justify-between border-b border-border py-1 text-sm last:border-0">
+                  <span>#{m.id} · {m.client} · {m.severity || ''}</span>
+                  <span className="text-ink-muted">{fmtDate(m.date)} · {m.facility || ''}</span>
+                </div>
+              ))}
+            </Panel>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Panel title="Serious / reportable — no root cause" count={rows(d.missingRootCause).length} tone="danger">
