@@ -13,6 +13,7 @@ export default function ComplianceTabs() {
       <NavLink to="/c360/incidents" className={tab}>Incidents</NavLink>
       <NavLink to="/c360/incident-compliance" className={tab}>Incident Compliance</NavLink>
       {can(user, 'admin.manage') && <NavLink to="/c360/incident-rules" className={tab}>Rules</NavLink>}
+      <NavLink to="/c360/market-documentation" className={tab}>Doc by Market</NavLink>
       <NavLink to="/c360/residential" className={tab}>Documentation</NavLink>
     </div>
   );
