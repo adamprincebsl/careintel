@@ -12,14 +12,14 @@ const tzFor = (s) => (s && CENTRAL.has(String(s).trim()) ? 'America/Chicago' : '
 const fmtDate = (v) => (v ? new Date(v).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '—');
 const fmtTime = (v, state) => (v ? new Date(v).toLocaleTimeString('en-US', { timeZone: tzFor(state), hour: 'numeric', minute: '2-digit' }) : '—');
 const hrs = (m) => (m ? (m / 60).toFixed(1) : '0');
-const units = (m) => (m ? Math.round(m / 15) : 0); // 15-minute billing units
+const units = (m) => (m ? Math.round(m / 15) : 0); // 15-minute billing units (covered time)
 
 const iso = (d) => d.toISOString().slice(0, 10);
 const DEFAULT_FROM = iso(new Date(Date.now() - 30 * 86400000));
 const DEFAULT_TO = iso(new Date());
 const QOPTS = { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false };
 
-// Fraction of 24h documented, clamped for the coverage bar.
+// Fraction of 24h covered (union of res+day), clamped.
 function CoverageBar({ min }) {
   const p = Math.min(100, Math.round((min / 1440) * 100));
   const tone = p >= 95 ? 'bg-success' : p >= 50 ? 'bg-gold' : 'bg-danger';
@@ -41,7 +41,7 @@ function ClientDrawer({ clientId, state, qs, onClose }) {
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
-      <div className="h-full w-full max-w-3xl overflow-y-auto bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="h-full w-full max-w-4xl overflow-y-auto bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{c ? `${c.LastName}, ${c.FirstName}` : `Client ${clientId}`}</h2>
           <button onClick={onClose}><X className="h-5 w-5 text-ink-muted" /></button>
@@ -51,28 +51,27 @@ function ClientDrawer({ clientId, state, qs, onClose }) {
         {isFetching && <p className="text-sm text-ink-muted">Loading…</p>}
 
         <section className="mb-4 overflow-x-auto rounded border border-border">
-          <div className="border-b border-border px-3 py-2 text-sm font-semibold">Documentation by day — combined vs 24h ({byDay.length})</div>
+          <div className="border-b border-border px-3 py-2 text-sm font-semibold">Per day — overnights split across days, times combined across notes ({byDay.length})</div>
           <table className="w-full text-left text-sm">
             <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
-              <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Coverage</th><th className="px-3 py-2">Total hrs</th><th className="px-3 py-2">Res hrs</th><th className="px-3 py-2">Day hrs</th><th className="px-3 py-2">Units</th><th className="px-3 py-2">Gap to 24h</th><th className="px-3 py-2">Notes</th></tr>
+              <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Coverage</th><th className="px-3 py-2">Covered</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Res</th><th className="px-3 py-2">Day</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Res∩Day</th><th className="px-3 py-2">Gap 24h</th><th className="px-3 py-2">Notes</th></tr>
             </thead>
             <tbody>
-              {!byDay.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={8}>No notes in range.</td></tr>}
-              {byDay.map((d) => {
-                const gap = Math.max(0, d.gapMin);
-                return (
-                  <tr key={d.day} className={`border-t border-border ${d.incomplete ? 'bg-danger/5' : ''}`}>
-                    <td className="px-3 py-1.5">{fmtDate(d.day)}</td>
-                    <td className="px-3 py-1.5"><CoverageBar min={d.totalMin} /></td>
-                    <td className="px-3 py-1.5 font-medium">{hrs(d.totalMin)}</td>
-                    <td className="px-3 py-1.5">{d.resMin ? hrs(d.resMin) : '—'}</td>
-                    <td className="px-3 py-1.5">{d.dayMin ? hrs(d.dayMin) : '—'}</td>
-                    <td className="px-3 py-1.5 tabular-nums">{units(d.totalMin)}</td>
-                    <td className="px-3 py-1.5 text-danger">{gap ? hrs(gap) : '—'}</td>
-                    <td className="px-3 py-1.5">{d.notes}{d.incomplete ? <span className="ml-1 text-xs text-danger">({d.incomplete} inc)</span> : ''}</td>
-                  </tr>
-                );
-              })}
+              {!byDay.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={10}>No notes in range.</td></tr>}
+              {byDay.map((d) => (
+                <tr key={d.day} className={`border-t border-border ${d.overlapMin ? 'bg-gold-tint/40' : ''}`}>
+                  <td className="px-3 py-1.5">{fmtDate(d.day)}</td>
+                  <td className="px-3 py-1.5"><CoverageBar min={d.coveredMin} /></td>
+                  <td className="px-3 py-1.5 font-medium">{hrs(d.coveredMin)}</td>
+                  <td className="px-3 py-1.5">{hrs(d.rawMin)}</td>
+                  <td className="px-3 py-1.5">{d.resMin ? hrs(d.resMin) : '—'}</td>
+                  <td className="px-3 py-1.5">{d.dayMin ? hrs(d.dayMin) : '—'}</td>
+                  <td className={`px-3 py-1.5 ${d.overlapMin ? 'font-medium text-gold-dark' : 'text-ink-muted'}`}>{d.overlapMin ? hrs(d.overlapMin) : '—'}</td>
+                  <td className={`px-3 py-1.5 ${d.resDayOverlapMin ? 'font-medium text-danger' : 'text-ink-muted'}`}>{d.resDayOverlapMin ? hrs(d.resDayOverlapMin) : '—'}</td>
+                  <td className="px-3 py-1.5 text-danger">{d.gapMin ? hrs(d.gapMin) : '—'}</td>
+                  <td className="px-3 py-1.5">{d.notes}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </section>
@@ -104,7 +103,7 @@ function ClientDrawer({ clientId, state, qs, onClose }) {
 }
 
 function Kpi({ label, value, sub, tone }) {
-  const tones = { danger: 'text-danger', success: 'text-success' };
+  const tones = { danger: 'text-danger', success: 'text-success', gold: 'text-gold-dark' };
   return (
     <div className="rounded border border-border bg-white p-3">
       <div className="text-xs uppercase tracking-wide text-ink-muted">{label}</div>
@@ -129,9 +128,9 @@ export default function MarketDocumentation() {
 
   const rows = data?.rows || [];
   const totals = useMemo(() => rows.reduce((a, r) => ({
-    hrs: a.hrs + r.totalMin, days: a.days + r.days,
+    covered: a.covered + r.coveredMin, overlap: a.overlap + r.overlapMin,
     gap: a.gap + (r.hasRes ? r.gapMin : 0), inc: a.inc + r.incomplete
-  }), { hrs: 0, days: 0, gap: 0, inc: 0 }), [rows]);
+  }), { covered: 0, overlap: 0, gap: 0, inc: 0 }), [rows]);
 
   return (
     <div className="space-y-4">
@@ -141,9 +140,10 @@ export default function MarketDocumentation() {
         <h1 className="text-xl font-semibold">Documentation by State</h1>
       </div>
       <p className="text-sm text-ink-muted">
-        For clients in a residential program, a day is 24h that should be accounted for across residential and day-hab notes.
-        This combines both note types into total hours documented per client per day and shows the gap to 24h.
-        Residential notes are pre-created shells; a shell with no last-modified date is a scheduled note not yet completed.
+        For residential clients, a day is 24h to account for across residential + day-hab notes. Overnight shifts are split across
+        calendar days and times combined across a day’s notes. <b>Covered</b> = unique clock time documented (caps at 24h);
+        <b> Total</b> = summed across all notes; <b>Overlap</b> = double-documented time (total − covered). Residential notes are
+        pre-created shells; a shell with no last-modified date is a scheduled note not yet completed.
       </p>
 
       {!canPhi && <p className="rounded border border-gold bg-gold-tint px-3 py-2 text-sm text-gold-dark">You don’t have permission to view client documentation (PHI).</p>}
@@ -175,9 +175,9 @@ export default function MarketDocumentation() {
           </div>
           <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Kpi label="Clients" value={rows.length} />
-            <Kpi label="Hours documented" value={Math.round(totals.hrs / 60)} sub={`${units(totals.hrs)} units`} tone="success" />
-            <Kpi label="Avg hrs / client-day" value={totals.days ? (totals.hrs / totals.days / 60).toFixed(1) : '—'} />
-            <Kpi label="Gap to 24h (res clients)" value={Math.round(totals.gap / 60)} sub={`${totals.inc} incomplete notes`} tone={totals.gap ? 'danger' : undefined} />
+            <Kpi label="Covered hours" value={Math.round(totals.covered / 60)} sub={`${units(totals.covered)} units`} tone="success" />
+            <Kpi label="Overlap (double-doc)" value={Math.round(totals.overlap / 60)} sub="hrs total − covered" tone={totals.overlap ? 'gold' : undefined} />
+            <Kpi label="Gap to 24h (res)" value={Math.round(totals.gap / 60)} sub={`${totals.inc} incomplete notes`} tone={totals.gap ? 'danger' : undefined} />
           </section>
 
           <section className="overflow-x-auto rounded border border-border bg-white">
@@ -185,22 +185,24 @@ export default function MarketDocumentation() {
               <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-3 py-2">Client</th>
-                  <th className="px-3 py-2">Days</th><th className="px-3 py-2">Total hrs</th><th className="px-3 py-2">Units</th>
-                  <th className="px-3 py-2">Res hrs</th><th className="px-3 py-2">Day hrs</th><th className="px-3 py-2">Avg/day</th>
-                  <th className="px-3 py-2">Gap to 24h</th><th className="px-3 py-2">Days &lt;24h</th><th className="px-3 py-2">Incomplete</th>
+                  <th className="px-3 py-2">Days</th><th className="px-3 py-2">Covered hrs</th><th className="px-3 py-2">Units</th>
+                  <th className="px-3 py-2">Total hrs</th><th className="px-3 py-2">Overlap</th>
+                  <th className="px-3 py-2">Res hrs</th><th className="px-3 py-2">Day hrs</th>
+                  <th className="px-3 py-2">Gap 24h</th><th className="px-3 py-2">Days &lt;24h</th><th className="px-3 py-2">Incomplete</th>
                 </tr>
               </thead>
               <tbody>
-                {!rows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={10}>No documentation for this state and range.</td></tr>}
+                {!rows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={11}>No documentation for this state and range.</td></tr>}
                 {rows.map((r) => (
                   <tr key={r.clientId} className="cursor-pointer border-t border-border hover:bg-surface/50" onClick={() => setSelected(r.clientId)}>
                     <td className="px-3 py-1.5 font-medium text-beacon">{r.LastName}, {r.FirstName}</td>
                     <td className="px-3 py-1.5">{r.days}</td>
-                    <td className="px-3 py-1.5 font-medium">{hrs(r.totalMin)}</td>
-                    <td className="px-3 py-1.5 tabular-nums">{units(r.totalMin)}</td>
+                    <td className="px-3 py-1.5 font-medium">{hrs(r.coveredMin)}</td>
+                    <td className="px-3 py-1.5 tabular-nums">{units(r.coveredMin)}</td>
+                    <td className="px-3 py-1.5">{hrs(r.totalMin)}</td>
+                    <td className={`px-3 py-1.5 ${r.overlapMin ? 'font-medium text-gold-dark' : 'text-ink-muted'}`}>{r.overlapMin ? hrs(r.overlapMin) : '—'}</td>
                     <td className="px-3 py-1.5">{r.resMin ? hrs(r.resMin) : '—'}</td>
                     <td className="px-3 py-1.5">{r.dayMin ? hrs(r.dayMin) : '—'}</td>
-                    <td className="px-3 py-1.5">{r.days ? (r.totalMin / r.days / 60).toFixed(1) : '—'}</td>
                     <td className="px-3 py-1.5 text-danger">{r.hasRes ? hrs(r.gapMin) : '—'}</td>
                     <td className="px-3 py-1.5">{r.hasRes ? r.daysUnder : '—'}</td>
                     <td className={`px-3 py-1.5 font-medium ${r.incomplete ? 'text-danger' : 'text-ink-muted'}`}>{r.incomplete || '—'}</td>
