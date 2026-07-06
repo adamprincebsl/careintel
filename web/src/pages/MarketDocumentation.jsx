@@ -147,12 +147,13 @@ function Kpi({ label, value, sub, tone }) {
 export default function MarketDocumentation() {
   const { user } = useAuth();
   const canPhi = can(user, 'note.viewPhi');
-  const [f, setF] = useState({ state: '', from: DEFAULT_FROM, to: DEFAULT_TO });
+  const [f, setF] = useState({ state: '', facility: '', from: DEFAULT_FROM, to: DEFAULT_TO });
   const [applied, setApplied] = useState(null);
   const [selected, setSelected] = useState(null);
 
   const { data: opts } = useQuery({ queryKey: ['market-doc-options'], queryFn: api.marketDocOptions, ...QOPTS });
-  const qs = applied ? new URLSearchParams(applied).toString() : '';
+  const stateFacilities = (opts?.facilities || []).filter((fac) => fac.state === f.state);
+  const qs = applied ? new URLSearchParams(Object.entries(applied).filter(([, v]) => v)).toString() : '';
   const { data, isFetching, error } = useQuery({
     queryKey: ['market-doc-roster', qs], queryFn: () => api.marketDocRoster(qs), enabled: !!applied && canPhi, ...QOPTS
   });
@@ -183,9 +184,16 @@ export default function MarketDocumentation() {
 
       <section className="flex flex-wrap items-end gap-3 rounded border border-border bg-surface p-3">
         <label className="text-xs text-ink-muted">State
-          <select value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })} className="mt-1 block w-48 rounded border border-border px-2 py-1 text-sm">
+          <select value={f.state} onChange={(e) => setF({ ...f, state: e.target.value, facility: '' })} className="mt-1 block w-44 rounded border border-border px-2 py-1 text-sm">
             <option value="">Select a state…</option>
             {(opts?.states || []).map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-ink-muted">Facility (home)
+          <select value={f.facility} onChange={(e) => setF({ ...f, facility: e.target.value })} disabled={!f.state}
+            className="mt-1 block w-56 rounded border border-border px-2 py-1 text-sm disabled:opacity-50">
+            <option value="">All homes{f.state ? ` (${stateFacilities.length})` : ''}</option>
+            {stateFacilities.map((fac) => <option key={fac.id} value={fac.id}>{fac.name}</option>)}
           </select>
         </label>
         <label className="text-xs text-ink-muted">From
@@ -204,7 +212,9 @@ export default function MarketDocumentation() {
       {applied && data && (
         <>
           <div className="rounded border border-gold bg-gold-tint px-3 py-1.5 text-xs text-gold-dark">
-            Identified client documentation (PHI) — access is audited. {applied.state} · {fmtDate(applied.from)}–{fmtDate(applied.to)}
+            Identified client documentation (PHI) — access is audited. {applied.state}
+            {applied.facility ? ` · ${(opts?.facilities || []).find((x) => String(x.id) === String(applied.facility))?.name || 'home'}` : ''}
+            {' · '}{fmtDate(applied.from)}–{fmtDate(applied.to)}
           </div>
           <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Kpi label="Clients" value={rows.length} />

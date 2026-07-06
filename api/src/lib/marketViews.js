@@ -42,9 +42,14 @@ function range({ from, to } = {}) {
 }
 
 export async function marketOptions() {
-  const states = await c360Query(`SELECT DISTINCT State AS name FROM ${LOC}
-      WHERE State IS NOT NULL AND State <> '' AND IsInactive = 0 ORDER BY State`, {});
-  return { states };
+  const [states, facilities] = await Promise.all([
+    c360Query(`SELECT DISTINCT State AS name FROM ${LOC}
+      WHERE State IS NOT NULL AND State <> '' AND IsInactive = 0 ORDER BY State`, {}),
+    c360Query(`SELECT DISTINCT loc.LocationID AS id, loc.LocationName AS name, loc.State AS state
+      FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
+      WHERE loc.State IS NOT NULL AND loc.State <> '' ORDER BY loc.State, loc.LocationName`, {})
+  ]);
+  return { states, facilities };
 }
 
 // ---- interval helpers -------------------------------------------------------
@@ -119,23 +124,31 @@ function perDayFromNotes(notes) {
   return { rows, incompleteRes, documented };
 }
 
-async function fetchSpans({ state, from, toEnd, cid }) {
-  const where = cid ? 'AND n.ClientID = @cid' : '';
-  const p = cid ? { state, from, toEnd, cid: parseInt(cid, 10) } : { state, from, toEnd };
+// Optional filters shared by the note/census queries (cid, facility LocationID).
+function scope({ cid, facility }) {
+  const clause = [cid ? 'AND n.ClientID = @cid' : '', facility ? 'AND loc.LocationID = @facility' : ''].join(' ');
+  const params = { ...(cid ? { cid: parseInt(cid, 10) } : {}), ...(facility ? { facility: parseInt(facility, 10) } : {}) };
+  return { clause, params };
+}
+
+async function fetchSpans({ state, from, toEnd, cid, facility }) {
+  const { clause, params } = scope({ cid, facility });
+  const p = { state, from, toEnd, ...params };
   return c360Query(`
     SELECT n.ClientID AS cid, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT, 'R' AS typ,
            CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc, loc.LocationName AS facility, n.ServiceDate AS svcDate
     FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
-    WHERE loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd ${where}
+    WHERE loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd ${clause}
     UNION ALL
     SELECT n.ClientID, n.ServiceStart, n.ServiceEnd, 'D',
            CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END, loc.LocationName, CAST(n.ServiceStart AS date)
     FROM ${DAY} n JOIN ${LOC} loc ON n.Location = loc.LocationID
-    WHERE loc.State = @state AND n.ServiceStart >= @from AND n.ServiceStart < @toEnd ${where}`, p);
+    WHERE loc.State = @state AND n.ServiceStart >= @from AND n.ServiceStart < @toEnd ${clause}`, p);
 }
 
 // Individual notes for one client (drill-down): time, duration, author, status.
-async function fetchClientNotes({ state, from, toEnd, cid }) {
+async function fetchClientNotes({ state, from, toEnd, cid, facility }) {
+  const facClause = facility ? 'AND loc.LocationID = @facility' : '';
   return c360Query(`SELECT n.BSL_ResidentialServiceNoteID AS id, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT,
       n.ServiceDate AS svcDate, n.Duration AS dur, n.SubmissionStatus AS sub, 'R' AS typ,
       CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc,
@@ -144,14 +157,15 @@ async function fetchClientNotes({ state, from, toEnd, cid }) {
     FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
     LEFT JOIN dbo.s_User au ON n.CreatedBy = au.UserID
     LEFT JOIN dbo.s_User mo ON n.LastModifiedBy = mo.UserID
-    WHERE n.ClientID = @cid AND loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd
-    ORDER BY n.ServiceDate DESC, n.ServiceStartTime`, { cid: parseInt(cid, 10), state, from, toEnd }).catch(() => []);
+    WHERE n.ClientID = @cid AND loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd ${facClause}
+    ORDER BY n.ServiceDate DESC, n.ServiceStartTime`,
+    { cid: parseInt(cid, 10), state, from, toEnd, ...(facility ? { facility: parseInt(facility, 10) } : {}) }).catch(() => []);
 }
 
 // Out-days from the daily census: Map cid -> { dayKey -> reasonLabel }.
-async function fetchCensusOutDays({ state, from, toEnd, cid }) {
-  const where = cid ? 'AND d.ClientID = @cid' : '';
-  const p = cid ? { state, from, toEnd, cid: parseInt(cid, 10) } : { state, from, toEnd };
+async function fetchCensusOutDays({ state, from, toEnd, cid, facility }) {
+  const where = [cid ? 'AND d.ClientID = @cid' : '', facility ? 'AND loc.LocationID = @facility' : ''].join(' ');
+  const p = { state, from, toEnd, ...(cid ? { cid: parseInt(cid, 10) } : {}), ...(facility ? { facility: parseInt(facility, 10) } : {}) };
   const rows = await c360Query(`
     SELECT d.ClientID AS cid, c.CensusDate AS day,
       MAX(CAST(d.IsPresent AS int)) AS present,
@@ -208,9 +222,10 @@ async function fetchPrograms(cid) {
 // Roster: per-client rollup, absence-aware (out-days excluded from the gap).
 export async function marketDocRoster(params) {
   const { from, toEnd } = range(params);
+  const facility = params.facility;
   const [spans, censusMap] = await Promise.all([
-    fetchSpans({ state: params.state, from, toEnd }),
-    fetchCensusOutDays({ state: params.state, from, toEnd })
+    fetchSpans({ state: params.state, from, toEnd, facility }),
+    fetchCensusOutDays({ state: params.state, from, toEnd, facility })
   ]);
   const byClient = new Map();
   for (const s of spans) { if (!byClient.has(s.cid)) byClient.set(s.cid, []); byClient.get(s.cid).push(s); }
@@ -258,10 +273,11 @@ export async function marketDocRoster(params) {
 export async function marketClientDetail(params) {
   const cid = parseInt(params.clientId, 10);
   const { from, toEnd } = range(params);
+  const facility = params.facility;
   const [clientRows, noteRows, censusMap, programs] = await Promise.all([
     c360Query(`SELECT TOP 1 ClientID, FirstName, LastName, BirthDate FROM dbo.c_Client WHERE ClientID = @cid`, { cid }).catch(() => []),
-    fetchClientNotes({ state: params.state, from, toEnd, cid }),
-    fetchCensusOutDays({ state: params.state, from, toEnd, cid }),
+    fetchClientNotes({ state: params.state, from, toEnd, cid, facility }),
+    fetchCensusOutDays({ state: params.state, from, toEnd, cid, facility }),
     fetchPrograms(cid)
   ]);
   const client = clientRows[0] || null;
