@@ -54,13 +54,14 @@ function ClientDrawer({ clientId, state, qs, onClose }) {
           <div className="border-b border-border px-3 py-2 text-sm font-semibold">Per day — overnights split across days, times combined across notes ({byDay.length})</div>
           <table className="w-full text-left text-sm">
             <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
-              <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Coverage</th><th className="px-3 py-2">Covered</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Res</th><th className="px-3 py-2">Day</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Res∩Day</th><th className="px-3 py-2">Gap 24h</th><th className="px-3 py-2">Notes</th></tr>
+              <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Home</th><th className="px-3 py-2">Coverage</th><th className="px-3 py-2">Covered</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Res</th><th className="px-3 py-2">Day</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Res∩Day</th><th className="px-3 py-2">Gap 24h</th><th className="px-3 py-2">Notes</th></tr>
             </thead>
             <tbody>
-              {!byDay.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={10}>No notes in range.</td></tr>}
+              {!byDay.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={11}>No notes in range.</td></tr>}
               {byDay.map((d) => (
                 <tr key={d.day} className={`border-t border-border ${d.overlapMin ? 'bg-gold-tint/40' : ''}`}>
                   <td className="px-3 py-1.5">{fmtDate(d.day)}</td>
+                  <td className="px-3 py-1.5 text-ink-muted">{d.location || '—'}</td>
                   <td className="px-3 py-1.5"><CoverageBar min={d.coveredMin} /></td>
                   <td className="px-3 py-1.5 font-medium">{hrs(d.coveredMin)}</td>
                   <td className="px-3 py-1.5">{hrs(d.rawMin)}</td>
@@ -184,7 +185,7 @@ export default function MarketDocumentation() {
             <table className="w-full text-left text-sm">
               <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
-                  <th className="px-3 py-2">Client</th>
+                  <th className="px-3 py-2">Client</th><th className="px-3 py-2">Home</th>
                   <th className="px-3 py-2">Days</th><th className="px-3 py-2">Covered hrs</th><th className="px-3 py-2">Units</th>
                   <th className="px-3 py-2">Total hrs</th><th className="px-3 py-2">Overlap</th>
                   <th className="px-3 py-2">Res hrs</th><th className="px-3 py-2">Day hrs</th>
@@ -192,10 +193,11 @@ export default function MarketDocumentation() {
                 </tr>
               </thead>
               <tbody>
-                {!rows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={11}>No documentation for this state and range.</td></tr>}
+                {!rows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={12}>No documentation for this state and range.</td></tr>}
                 {rows.map((r) => (
                   <tr key={r.clientId} className="cursor-pointer border-t border-border hover:bg-surface/50" onClick={() => setSelected(r.clientId)}>
                     <td className="px-3 py-1.5 font-medium text-beacon">{r.LastName}, {r.FirstName}</td>
+                    <td className="px-3 py-1.5 text-ink-muted">{r.location || '—'}{r.locationCount > 1 ? <span className="ml-1 rounded bg-surface px-1 text-xs">+{r.locationCount - 1}</span> : ''}</td>
                     <td className="px-3 py-1.5">{r.days}</td>
                     <td className="px-3 py-1.5 font-medium">{hrs(r.coveredMin)}</td>
                     <td className="px-3 py-1.5 tabular-nums">{units(r.coveredMin)}</td>

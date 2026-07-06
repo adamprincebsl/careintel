@@ -83,17 +83,21 @@ function intersectMin(A, B) { // A, B are merged unions
   return Math.round(total / MS_MIN);
 }
 
+// Pick the most-frequent key from a { key: count } tally.
+const dominant = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
 // Roll a client's raw notes into per-day metrics (overnight-split + overlap).
 function perDayFromNotes(notes) {
-  const days = {}; // dayKey -> { res:[slices], day:[slices], rawMin, notes, incomplete }
+  const days = {}; // dayKey -> { res:[slices], day:[slices], notes, fac:{name:count} }
   let incompleteRes = 0;
   for (const n of notes) {
     const span = normSpan(n.startT, n.endT);
     if (n.typ === 'R' && n.inc) incompleteRes++;
     if (!span) continue;
     for (const [k, s, e] of slicesByDay(span[0], span[1])) {
-      const d = (days[k] ||= { res: [], day: [], notes: 0 });
+      const d = (days[k] ||= { res: [], day: [], notes: 0, fac: {} });
       (n.typ === 'R' ? d.res : d.day).push([s, e]);
+      if (n.facility) d.fac[n.facility] = (d.fac[n.facility] || 0) + 1;
     }
   }
   // Notes counted per day at their service start day.
@@ -111,27 +115,25 @@ function perDayFromNotes(notes) {
       overlapMin: Math.max(0, rawMin - coveredMin),
       resDayOverlapMin: intersectMin(resU, dayU),
       gapMin: Math.max(0, DAY_MIN - coveredMin),
-      notes: d.notes
+      notes: d.notes, location: dominant(d.fac)
     };
   }).sort((a, b) => (a.day < b.day ? 1 : -1));
   return { rows, incompleteRes };
 }
 
 async function fetchSpans({ state, from, toEnd, cid }) {
-  const where = cid ? 'AND ClientID = @cid' : '';
+  const where = cid ? 'AND n.ClientID = @cid' : '';
   const p = cid ? { state, from, toEnd, cid: parseInt(cid, 10) } : { state, from, toEnd };
   return c360Query(`
-    SELECT ClientID AS cid, ServiceStartTime AS startT, ServiceEndTime AS endT, 'R' AS typ,
-           CASE WHEN LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc
-    FROM ${RES}
-    WHERE Location IN (SELECT LocationID FROM ${LOC} WHERE State = @state)
-      AND ServiceDate >= @from AND ServiceDate < @toEnd ${where}
+    SELECT n.ClientID AS cid, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT, 'R' AS typ,
+           CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc, loc.LocationName AS facility
+    FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
+    WHERE loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd ${where}
     UNION ALL
-    SELECT ClientID, ServiceStart, ServiceEnd, 'D',
-           CASE WHEN LastModifiedOn IS NULL THEN 1 ELSE 0 END
-    FROM ${DAY}
-    WHERE Location IN (SELECT LocationID FROM ${LOC} WHERE State = @state)
-      AND ServiceStart >= @from AND ServiceStart < @toEnd ${where}`, p);
+    SELECT n.ClientID, n.ServiceStart, n.ServiceEnd, 'D',
+           CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END, loc.LocationName
+    FROM ${DAY} n JOIN ${LOC} loc ON n.Location = loc.LocationID
+    WHERE loc.State = @state AND n.ServiceStart >= @from AND n.ServiceStart < @toEnd ${where}`, p);
 }
 
 // Roster: per-client rollup across the window.
@@ -150,7 +152,12 @@ export async function marketDocRoster(params) {
       overlapMin: a.overlapMin + d.overlapMin, gapMin: a.gapMin + d.gapMin,
       daysUnder: a.daysUnder + (d.coveredMin < DAY_MIN ? 1 : 0)
     }), { totalMin: 0, coveredMin: 0, resMin: 0, dayMin: 0, overlapMin: 0, gapMin: 0, daysUnder: 0 });
-    rows.push({ clientId: cid, days: pd.length, incomplete: incompleteRes, hasRes: agg.resMin > 0, ...agg });
+    const facCounts = {};
+    for (const n of notes) if (n.facility) facCounts[n.facility] = (facCounts[n.facility] || 0) + 1;
+    rows.push({
+      clientId: cid, days: pd.length, incomplete: incompleteRes, hasRes: agg.resMin > 0,
+      location: dominant(facCounts), locationCount: Object.keys(facCounts).length, ...agg
+    });
   }
   rows.sort((a, b) => (b.hasRes - a.hasRes) || (b.gapMin - a.gapMin));
 
