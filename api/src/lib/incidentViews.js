@@ -96,12 +96,17 @@ export async function queryIncidentsStructured(f = {}) {
   return c360Query(`SELECT TOP ${top}
     i.BSL_IncidentID AS IncidentId,
     ${INCIDENT_DATE} AS IncidentDate,
+    i.TimeofIncident AS TimeofIncident,
     ${INITIALS} AS ClientInitials,
     ${TYPES_AGG} AS IncidentTypes,
     sev.UDDescription AS SeverityOfInjury,
+    ${udo('AntagonistVictim')} AS AntagonistVictim,
     pl.UDDescription AS PlaceOfIncident,
+    i.OtherLocation AS OtherLocation,
     loc.LocationName AS Facility, loc.State AS State,
-    CASE WHEN ISNULL(i.AbuseNeglect,0)=1 THEN 'Yes' ELSE 'No' END AS AbuseNeglect
+    CASE WHEN ISNULL(i.AbuseNeglect,0)=1 THEN 'Yes' ELSE 'No' END AS AbuseNeglect,
+    i.Was911called_ AS Was911Called,
+    i.CreatedBy_ AS ReportedBy, i.CreatedOn AS CreatedOn, i.LastModifiedOn AS LastModifiedOn
     FROM ${INC} i
     ${CLIENT_JOIN}
     LEFT JOIN ${UDO} sev ON i.Severity = sev.UDID

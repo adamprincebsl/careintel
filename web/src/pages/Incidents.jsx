@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { AlertTriangle, X, FileDown } from 'lucide-react';
+import { AlertTriangle, X, FileDown, Columns3, ArrowUp, ArrowDown } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { can } from '../lib/permissions';
@@ -88,6 +88,29 @@ function fmt(v) {
   return String(v);
 }
 
+// Available list columns (all de-identified). Users pick which to show + order
+// is preserved from this catalog. `sort` sets comparison type.
+const COLUMNS = [
+  { key: 'IncidentDate', label: 'Date', sort: 'date' },
+  { key: 'TimeofIncident', label: 'Time', sort: 'date' },
+  { key: 'ClientInitials', label: 'Client', sort: 'str' },
+  { key: 'IncidentTypes', label: 'Type(s)', sort: 'str' },
+  { key: 'SeverityOfInjury', label: 'Inj. severity', sort: 'str' },
+  { key: 'PlaceOfIncident', label: 'Place', sort: 'str' },
+  { key: 'Facility', label: 'Location', sort: 'str' },
+  { key: 'State', label: 'State', sort: 'str' },
+  { key: 'AbuseNeglect', label: 'A/N', sort: 'str' },
+  { key: 'OtherLocation', label: 'Other location', sort: 'str' },
+  { key: 'AntagonistVictim', label: 'Antagonist / victim', sort: 'str' },
+  { key: 'Was911Called', label: '911 called', sort: 'str' },
+  { key: 'ReportedBy', label: 'Reported by', sort: 'str' },
+  { key: 'CreatedOn', label: 'Created', sort: 'date' },
+  { key: 'LastModifiedOn', label: 'Modified', sort: 'date' },
+  { key: 'IncidentId', label: 'Incident #', sort: 'num' }
+];
+const DEFAULT_COLS = ['IncidentDate', 'ClientInitials', 'IncidentTypes', 'SeverityOfInjury', 'PlaceOfIncident', 'Facility', 'State', 'AbuseNeglect'];
+const loadLS = (k, fallback) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fallback; } catch { return fallback; } };
+
 export default function Incidents() {
   const { user } = useAuth();
   const canPhi = can(user, 'note.viewPhi');
@@ -95,7 +118,21 @@ export default function Incidents() {
   const [applied, setApplied] = useState(f);
   const [selected, setSelected] = useState(null);
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState(() => loadLS('inc-sort', { key: 'IncidentDate', dir: 'desc' }));
+  const [visible, setVisible] = useState(() => {
+    const v = loadLS('inc-cols', DEFAULT_COLS);
+    return Array.isArray(v) && v.length ? v : DEFAULT_COLS;
+  });
+  const [pickerOpen, setPickerOpen] = useState(false);
   const PAGE_SIZE = 50;
+
+  useEffect(() => { localStorage.setItem('inc-sort', JSON.stringify(sort)); }, [sort]);
+  useEffect(() => { localStorage.setItem('inc-cols', JSON.stringify(visible)); }, [visible]);
+  useEffect(() => { setPage(0); }, [sort]);
+
+  const cols = COLUMNS.filter((c) => visible.includes(c.key));
+  const toggleSort = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
+  const toggleCol = (key) => setVisible((v) => (v.includes(key) ? v.filter((k) => k !== key) : [...v, key]));
 
   const { data: opts } = useQuery({ queryKey: ['inc-options'], queryFn: api.incOptions });
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v)).toString();
@@ -110,8 +147,19 @@ export default function Incidents() {
   const byClient = metrics?.byClient || [];
   const tCount = (re) => { const m = byType.find((t) => re.test(t.label || '')); return m ? m.c : 0; };
   const allRows = list?.rows || [];
-  const pageRows = allRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-  const pageCount = Math.max(1, Math.ceil(allRows.length / PAGE_SIZE));
+  const sortedRows = useMemo(() => {
+    const col = COLUMNS.find((c) => c.key === sort.key);
+    const out = [...allRows].sort((a, b) => {
+      let av = a[sort.key], bv = b[sort.key];
+      if (col?.sort === 'num') return (+av || 0) - (+bv || 0);
+      if (col?.sort === 'date') return (av ? new Date(av).getTime() : 0) - (bv ? new Date(bv).getTime() : 0);
+      av = (av ?? '').toString().toLowerCase(); bv = (bv ?? '').toString().toLowerCase();
+      return av < bv ? -1 : av > bv ? 1 : 0;
+    });
+    return sort.dir === 'desc' ? out.reverse() : out;
+  }, [allRows, sort]);
+  const pageRows = sortedRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
 
   return (
     <div className="space-y-4">
@@ -197,23 +245,59 @@ export default function Incidents() {
         </section>
       )}
 
-      <section className="overflow-x-auto rounded border border-border bg-white">
+      <section className="rounded border border-border bg-white">
+        <div className="relative flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="text-sm font-medium">{sortedRows.length} incident{sortedRows.length === 1 ? '' : 's'}</span>
+          <button onClick={() => setPickerOpen((o) => !o)} className="flex items-center gap-1.5 rounded border border-border px-2 py-1 text-xs font-medium hover:bg-surface">
+            <Columns3 className="h-4 w-4" /> Columns
+          </button>
+          {pickerOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
+              <div className="absolute right-3 top-10 z-20 w-60 rounded border border-border bg-white p-2 shadow-lg">
+                <div className="mb-1 flex items-center justify-between px-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Show columns</span>
+                  <button onClick={() => setVisible(DEFAULT_COLS)} className="text-xs text-beacon hover:underline">Reset</button>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {COLUMNS.map((c) => (
+                    <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-surface">
+                      <input type="checkbox" checked={visible.includes(c.key)}
+                        disabled={visible.length === 1 && visible.includes(c.key)}
+                        onChange={() => toggleCol(c.key)} />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
-            <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Client</th><th className="px-3 py-2">Type(s)</th><th className="px-3 py-2">Inj. severity</th><th className="px-3 py-2">Place</th><th className="px-3 py-2">Facility</th><th className="px-3 py-2">State</th><th className="px-3 py-2">A/N</th><th className="px-3 py-2"></th></tr>
+            <tr>
+              {cols.map((c) => {
+                const active = sort.key === c.key;
+                return (
+                  <th key={c.key} className="px-3 py-2">
+                    <button onClick={() => toggleSort(c.key)} className="flex items-center gap-1 font-medium uppercase tracking-wide hover:text-ink">
+                      {c.label}
+                      {active && (sort.dir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
+                    </button>
+                  </th>
+                );
+              })}
+              <th className="px-3 py-2"></th>
+            </tr>
           </thead>
           <tbody>
-            {list && !allRows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={9}>No incidents for these filters.</td></tr>}
+            {list && !allRows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={cols.length + 1}>No incidents for these filters.</td></tr>}
             {pageRows.map((r) => (
               <tr key={r.IncidentId} className="border-t border-border hover:bg-surface/50">
-                <td className="px-3 py-1.5">{fmt(r.IncidentDate)}</td>
-                <td className="px-3 py-1.5">{r.ClientInitials || '—'}</td>
-                <td className="px-3 py-1.5">{r.IncidentTypes || '—'}</td>
-                <td className="px-3 py-1.5">{r.SeverityOfInjury || '—'}</td>
-                <td className="px-3 py-1.5">{r.PlaceOfIncident || '—'}</td>
-                <td className="px-3 py-1.5">{r.Facility || '—'}</td>
-                <td className="px-3 py-1.5">{r.State || '—'}</td>
-                <td className="px-3 py-1.5">{r.AbuseNeglect}</td>
+                {cols.map((c) => (
+                  <td key={c.key} className="px-3 py-1.5">{fmt(r[c.key]) ?? '—'}</td>
+                ))}
                 <td className="px-3 py-1.5">
                   {canPhi && <button onClick={() => setSelected(r.IncidentId)} className="text-beacon hover:underline">view</button>}
                 </td>
@@ -221,6 +305,7 @@ export default function Incidents() {
             ))}
           </tbody>
         </table>
+        </div>
         {allRows.length > PAGE_SIZE && (
           <div className="flex items-center justify-between border-t border-border px-3 py-2 text-sm">
             <span className="text-ink-muted">
