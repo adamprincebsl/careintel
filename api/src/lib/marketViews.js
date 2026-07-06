@@ -92,25 +92,30 @@ function intersectMin(A, B) {
 }
 const dominant = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
+// A note is complete/"saved" when LastModifiedOn is set (n.inc = 0); otherwise
+// it's a scheduled shell (n.inc = 1). Coverage/overlap use documented notes only.
+const noteStatus = (n) => (n.inc ? 'Scheduled' : n.sub === 1015 ? 'Submitted' : n.sub === 1017 ? 'Approved' : n.sub === 1016 ? 'Feedback' : 'Saved');
+
 function perDayFromNotes(notes) {
   const days = {};
-  let incompleteRes = 0;
+  const nd = () => ({ res: [], day: [], doc: 0, inc: 0, fac: {} });
   for (const n of notes) {
     const span = normSpan(n.startT, n.endT);
-    if (n.typ === 'R' && n.inc) incompleteRes++;
-    if (!span) continue;
+    const k0 = span ? dayKey(span[0]) : (n.startT ? dayKey(new Date(n.startT).getTime()) : null);
+    if (k0) {
+      const d0 = (days[k0] ||= nd());
+      if (n.inc) d0.inc++; else d0.doc++;
+      if (n.facility) d0.fac[n.facility] = (d0.fac[n.facility] || 0) + 1;
+    }
+    if (!span || n.inc) continue; // coverage from documented (saved) notes only — skip shells
     for (const [k, s, e] of slicesByDay(span[0], span[1])) {
-      const d = (days[k] ||= { res: [], day: [], notes: 0, fac: {} });
-      (n.typ === 'R' ? d.res : d.day).push([s, e]);
-      if (n.facility) d.fac[n.facility] = (d.fac[n.facility] || 0) + 1;
+      const d = (days[k] ||= nd());
+      (n.typ === 'D' ? d.day : d.res).push([s, e]);
     }
   }
-  for (const n of notes) {
-    const span = normSpan(n.startT, n.endT);
-    const k = span ? dayKey(span[0]) : (n.startT ? dayKey(new Date(n.startT).getTime()) : null);
-    if (k && days[k]) days[k].notes++;
-  }
+  let incompleteRes = 0, documented = 0;
   const rows = Object.entries(days).map(([day, d]) => {
+    incompleteRes += d.inc; documented += d.doc;
     const resU = merge(d.res), dayU = merge(d.day), allU = merge([...d.res, ...d.day]);
     const resMin = unionMin(resU), dayMin = unionMin(dayU), coveredMin = unionMin(allU);
     const rawMin = Math.round([...d.res, ...d.day].reduce((s, [a, b]) => s + (b - a), 0) / MS_MIN);
@@ -118,10 +123,10 @@ function perDayFromNotes(notes) {
       day, resMin, dayMin, coveredMin, rawMin,
       overlapMin: Math.max(0, rawMin - coveredMin),
       resDayOverlapMin: intersectMin(resU, dayU),
-      notes: d.notes, location: dominant(d.fac)
+      doc: d.doc, inc: d.inc, location: dominant(d.fac)
     };
   }).sort((a, b) => (a.day < b.day ? 1 : -1));
-  return { rows, incompleteRes };
+  return { rows, incompleteRes, documented };
 }
 
 async function fetchSpans({ state, from, toEnd, cid }) {
@@ -137,6 +142,20 @@ async function fetchSpans({ state, from, toEnd, cid }) {
            CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END, loc.LocationName
     FROM ${DAY} n JOIN ${LOC} loc ON n.Location = loc.LocationID
     WHERE loc.State = @state AND n.ServiceStart >= @from AND n.ServiceStart < @toEnd ${where}`, p);
+}
+
+// Individual notes for one client (drill-down): time, duration, author, status.
+async function fetchClientNotes({ state, from, toEnd, cid }) {
+  return c360Query(`SELECT n.BSL_ResidentialServiceNoteID AS id, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT,
+      n.Duration AS dur, n.SubmissionStatus AS sub, 'R' AS typ,
+      CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc,
+      loc.LocationName AS facility, loc.State AS state,
+      au.FirstName + ' ' + au.LastName AS author, mo.FirstName + ' ' + mo.LastName AS modBy
+    FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
+    LEFT JOIN dbo.s_User au ON n.CreatedBy = au.UserID
+    LEFT JOIN dbo.s_User mo ON n.LastModifiedBy = mo.UserID
+    WHERE n.ClientID = @cid AND loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd
+    ORDER BY n.ServiceDate DESC, n.ServiceStartTime`, { cid: parseInt(cid, 10), state, from, toEnd }).catch(() => []);
 }
 
 // Out-days from the daily census: Map cid -> { dayKey -> reasonLabel }.
@@ -208,7 +227,7 @@ export async function marketDocRoster(params) {
 
   const rows = [];
   for (const [cid, notes] of byClient) {
-    const { rows: pd, incompleteRes } = perDayFromNotes(notes);
+    const { rows: pd, incompleteRes, documented } = perDayFromNotes(notes);
     const outMap = censusMap.get(cid) || {};
     let coveredMin = 0, totalMin = 0, resMin = 0, dayMin = 0, overlapMin = 0, gapMin = 0, daysUnder = 0, outDays = 0;
     const noteDays = new Set();
@@ -223,7 +242,7 @@ export async function marketDocRoster(params) {
     const facCounts = {};
     for (const n of notes) if (n.facility) facCounts[n.facility] = (facCounts[n.facility] || 0) + 1;
     rows.push({
-      clientId: cid, days: pd.length, incomplete: incompleteRes, hasRes: resMin > 0,
+      clientId: cid, days: pd.length, documented, incomplete: incompleteRes, hasRes: resMin > 0,
       location: dominant(facCounts), locationCount: Object.keys(facCounts).length,
       coveredMin, totalMin, resMin, dayMin, overlapMin, gapMin, daysUnder, outDays
     });
@@ -249,28 +268,28 @@ export async function marketDocRoster(params) {
 export async function marketClientDetail(params) {
   const cid = parseInt(params.clientId, 10);
   const { from, toEnd } = range(params);
-  const [clientRows, spans, censusMap, programs] = await Promise.all([
+  const [clientRows, noteRows, censusMap, programs] = await Promise.all([
     c360Query(`SELECT TOP 1 ClientID, FirstName, LastName, BirthDate FROM dbo.c_Client WHERE ClientID = @cid`, { cid }).catch(() => []),
-    fetchSpans({ state: params.state, from, toEnd, cid }),
+    fetchClientNotes({ state: params.state, from, toEnd, cid }),
     fetchCensusOutDays({ state: params.state, from, toEnd, cid }),
     fetchPrograms(cid)
   ]);
   const client = clientRows[0] || null;
   const outMap = censusMap.get(cid) || {};
-  const { rows: byDayRaw } = perDayFromNotes(spans);
+  const { rows: byDayRaw } = perDayFromNotes(noteRows);
   const byDay = byDayRaw.map((d) => {
     const outReason = outMap[d.day] || null;
     const expectedMin = outReason ? 0 : DAY_MIN;
     return { ...d, out: !!outReason, outReason, expectedMin, gapMin: Math.max(0, expectedMin - d.coveredMin) };
   });
 
-  const incomplete = await c360Query(`SELECT TOP 300 n.BSL_ResidentialServiceNoteID AS id,
-      CAST(n.ServiceDate AS date) AS day, n.ServiceStartTime, n.ServiceEndTime, n.CreatedOn,
-      loc.LocationName AS facility, loc.State AS state
-    FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
-    WHERE n.ClientID = @cid AND loc.State = @state AND n.LastModifiedOn IS NULL
-      AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd
-    ORDER BY day DESC, n.ServiceStartTime DESC`, { cid, state: params.state, from, toEnd }).catch(() => []);
+  // Per-note rows for the note-level drill-down (grouped by day in the UI).
+  const notes = noteRows.map((n) => ({
+    id: n.id, day: n.startT ? dayKey(new Date(n.startT).getTime()) : null,
+    start: n.startT, end: n.endT, durMin: n.dur, status: noteStatus(n),
+    author: (n.author || '').trim() || null, modBy: (n.modBy || '').trim() || null,
+    facility: n.facility, state: n.state
+  }));
 
-  return { client, range: { from, toEnd }, byDay, incomplete, programs };
+  return { client, range: { from, toEnd }, byDay, notes, programs };
 }
