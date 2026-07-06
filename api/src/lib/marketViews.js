@@ -58,18 +58,6 @@ function normSpan(s, e) {
   if (end - start > 36 * 3600000) end = start + MS_DAY;
   return [start, end];
 }
-function slicesByDay(start, end) {
-  const out = [];
-  let cur = start;
-  while (cur < end) {
-    const d = new Date(cur);
-    const nextMidnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
-    const sEnd = Math.min(end, nextMidnight);
-    out.push([dayKey(cur), cur, sEnd]);
-    cur = sEnd;
-  }
-  return out;
-}
 const merge = (ivals) => {
   if (!ivals.length) return [];
   const a = [...ivals].sort((x, y) => x[0] - y[0]);
@@ -96,32 +84,34 @@ const dominant = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1])[
 // it's a scheduled shell (n.inc = 1). Coverage/overlap use documented notes only.
 const noteStatus = (n) => (n.inc ? 'Scheduled' : n.sub === 1015 ? 'Submitted' : n.sub === 1017 ? 'Approved' : n.sub === 1016 ? 'Feedback' : 'Saved');
 
+// Group notes by their ServiceDate (the business day) and union each documented
+// note's full span (overnight rollover applied). A note is attributed wholly to
+// its service date — no splitting at calendar/UTC midnight — so a night shift
+// (7pm–7:30am) counts toward the day it serves. Covered caps at 24h.
 function perDayFromNotes(notes) {
   const days = {};
   const nd = () => ({ res: [], day: [], doc: 0, inc: 0, fac: {} });
   for (const n of notes) {
+    const k = n.svcDate ? dayKey(new Date(n.svcDate).getTime()) : (n.startT ? dayKey(new Date(n.startT).getTime()) : null);
+    if (!k) continue;
+    const d = (days[k] ||= nd());
+    if (n.inc) d.inc++; else d.doc++;
+    if (n.facility) d.fac[n.facility] = (d.fac[n.facility] || 0) + 1;
+    if (n.inc) continue; // coverage from documented (saved) notes only — skip shells
     const span = normSpan(n.startT, n.endT);
-    const k0 = span ? dayKey(span[0]) : (n.startT ? dayKey(new Date(n.startT).getTime()) : null);
-    if (k0) {
-      const d0 = (days[k0] ||= nd());
-      if (n.inc) d0.inc++; else d0.doc++;
-      if (n.facility) d0.fac[n.facility] = (d0.fac[n.facility] || 0) + 1;
-    }
-    if (!span || n.inc) continue; // coverage from documented (saved) notes only — skip shells
-    for (const [k, s, e] of slicesByDay(span[0], span[1])) {
-      const d = (days[k] ||= nd());
-      (n.typ === 'D' ? d.day : d.res).push([s, e]);
-    }
+    if (span) (n.typ === 'D' ? d.day : d.res).push(span);
   }
   let incompleteRes = 0, documented = 0;
   const rows = Object.entries(days).map(([day, d]) => {
     incompleteRes += d.inc; documented += d.doc;
     const resU = merge(d.res), dayU = merge(d.day), allU = merge([...d.res, ...d.day]);
-    const resMin = unionMin(resU), dayMin = unionMin(dayU), coveredMin = unionMin(allU);
+    const coveredU = unionMin(allU);
     const rawMin = Math.round([...d.res, ...d.day].reduce((s, [a, b]) => s + (b - a), 0) / MS_MIN);
     return {
-      day, resMin, dayMin, coveredMin, rawMin,
-      overlapMin: Math.max(0, rawMin - coveredMin),
+      day,
+      resMin: Math.min(unionMin(resU), DAY_MIN), dayMin: Math.min(unionMin(dayU), DAY_MIN),
+      coveredMin: Math.min(coveredU, DAY_MIN), rawMin,
+      overlapMin: Math.max(0, rawMin - coveredU), // double-documented time (uncapped union)
       resDayOverlapMin: intersectMin(resU, dayU),
       doc: d.doc, inc: d.inc, location: dominant(d.fac)
     };
@@ -134,12 +124,12 @@ async function fetchSpans({ state, from, toEnd, cid }) {
   const p = cid ? { state, from, toEnd, cid: parseInt(cid, 10) } : { state, from, toEnd };
   return c360Query(`
     SELECT n.ClientID AS cid, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT, 'R' AS typ,
-           CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc, loc.LocationName AS facility
+           CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc, loc.LocationName AS facility, n.ServiceDate AS svcDate
     FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
     WHERE loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd ${where}
     UNION ALL
     SELECT n.ClientID, n.ServiceStart, n.ServiceEnd, 'D',
-           CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END, loc.LocationName
+           CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END, loc.LocationName, CAST(n.ServiceStart AS date)
     FROM ${DAY} n JOIN ${LOC} loc ON n.Location = loc.LocationID
     WHERE loc.State = @state AND n.ServiceStart >= @from AND n.ServiceStart < @toEnd ${where}`, p);
 }
@@ -147,7 +137,7 @@ async function fetchSpans({ state, from, toEnd, cid }) {
 // Individual notes for one client (drill-down): time, duration, author, status.
 async function fetchClientNotes({ state, from, toEnd, cid }) {
   return c360Query(`SELECT n.BSL_ResidentialServiceNoteID AS id, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT,
-      n.Duration AS dur, n.SubmissionStatus AS sub, 'R' AS typ,
+      n.ServiceDate AS svcDate, n.Duration AS dur, n.SubmissionStatus AS sub, 'R' AS typ,
       CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc,
       loc.LocationName AS facility, loc.State AS state,
       au.FirstName + ' ' + au.LastName AS author, mo.FirstName + ' ' + mo.LastName AS modBy
@@ -285,7 +275,7 @@ export async function marketClientDetail(params) {
 
   // Per-note rows for the note-level drill-down (grouped by day in the UI).
   const notes = noteRows.map((n) => ({
-    id: n.id, day: n.startT ? dayKey(new Date(n.startT).getTime()) : null,
+    id: n.id, day: n.svcDate ? dayKey(new Date(n.svcDate).getTime()) : (n.startT ? dayKey(new Date(n.startT).getTime()) : null),
     start: n.startT, end: n.endT, durMin: n.dur, status: noteStatus(n),
     author: (n.author || '').trim() || null, modBy: (n.modBy || '').trim() || null,
     facility: n.facility, state: n.state
