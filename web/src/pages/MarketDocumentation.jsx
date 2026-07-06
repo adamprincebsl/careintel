@@ -18,6 +18,7 @@ const iso = (d) => d.toISOString().slice(0, 10);
 const DEFAULT_FROM = iso(new Date(Date.now() - 30 * 86400000));
 const DEFAULT_TO = iso(new Date());
 const QOPTS = { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false };
+const MODE_TONE = { Both: 'bg-beacon/10 text-beacon', Residential: 'bg-surface text-ink', Day: 'bg-gold-tint text-gold-dark', 'Life Sharing': 'bg-surface text-ink' };
 
 // Fraction of 24h covered (union of res+day), clamped.
 function CoverageBar({ min }) {
@@ -38,6 +39,7 @@ function ClientDrawer({ clientId, state, qs, onClose }) {
   const c = data?.client;
   const byDay = data?.byDay || [];
   const incomplete = data?.incomplete || [];
+  const programs = data?.programs || [];
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" onClick={onClose}>
@@ -50,26 +52,39 @@ function ClientDrawer({ clientId, state, qs, onClose }) {
         {error && <p className="text-sm text-danger">{String(error.message)}</p>}
         {isFetching && <p className="text-sm text-ink-muted">Loading…</p>}
 
+        {programs.length > 0 && (
+          <section className="mb-4 rounded border border-border">
+            <div className="border-b border-border px-3 py-2 text-sm font-semibold">Programs</div>
+            <div className="flex flex-wrap gap-2 p-3">
+              {programs.map((p, i) => (
+                <span key={i} className={`rounded border px-2 py-1 text-xs ${p.active ? 'border-success bg-success/5' : 'border-border bg-surface text-ink-muted'}`}>
+                  <b>{p.programType}</b> · {p.program}{p.active ? '' : p.discharge ? ` (disch ${fmtDate(p.discharge)})` : ''}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="mb-4 overflow-x-auto rounded border border-border">
-          <div className="border-b border-border px-3 py-2 text-sm font-semibold">Per day — overnights split across days, times combined across notes ({byDay.length})</div>
+          <div className="border-b border-border px-3 py-2 text-sm font-semibold">Per day — overnights split, times combined across notes; census out-days excluded from the gap ({byDay.length})</div>
           <table className="w-full text-left text-sm">
             <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
-              <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Home</th><th className="px-3 py-2">Coverage</th><th className="px-3 py-2">Covered</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Res</th><th className="px-3 py-2">Day</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Res∩Day</th><th className="px-3 py-2">Gap 24h</th><th className="px-3 py-2">Notes</th></tr>
+              <tr><th className="px-3 py-2">Date</th><th className="px-3 py-2">Home</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Coverage</th><th className="px-3 py-2">Covered</th><th className="px-3 py-2">Total</th><th className="px-3 py-2">Res</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Res∩Day</th><th className="px-3 py-2">Gap</th><th className="px-3 py-2">Notes</th></tr>
             </thead>
             <tbody>
               {!byDay.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={11}>No notes in range.</td></tr>}
               {byDay.map((d) => (
-                <tr key={d.day} className={`border-t border-border ${d.overlapMin ? 'bg-gold-tint/40' : ''}`}>
+                <tr key={d.day} className={`border-t border-border ${d.out ? 'bg-surface/60 text-ink-muted' : d.overlapMin ? 'bg-gold-tint/40' : ''}`}>
                   <td className="px-3 py-1.5">{fmtDate(d.day)}</td>
                   <td className="px-3 py-1.5 text-ink-muted">{d.location || '—'}</td>
+                  <td className="px-3 py-1.5 text-xs">{d.out ? <span className="font-medium text-ink-muted">Out · {d.outReason}</span> : ''}</td>
                   <td className="px-3 py-1.5"><CoverageBar min={d.coveredMin} /></td>
                   <td className="px-3 py-1.5 font-medium">{hrs(d.coveredMin)}</td>
                   <td className="px-3 py-1.5">{hrs(d.rawMin)}</td>
                   <td className="px-3 py-1.5">{d.resMin ? hrs(d.resMin) : '—'}</td>
-                  <td className="px-3 py-1.5">{d.dayMin ? hrs(d.dayMin) : '—'}</td>
                   <td className={`px-3 py-1.5 ${d.overlapMin ? 'font-medium text-gold-dark' : 'text-ink-muted'}`}>{d.overlapMin ? hrs(d.overlapMin) : '—'}</td>
                   <td className={`px-3 py-1.5 ${d.resDayOverlapMin ? 'font-medium text-danger' : 'text-ink-muted'}`}>{d.resDayOverlapMin ? hrs(d.resDayOverlapMin) : '—'}</td>
-                  <td className="px-3 py-1.5 text-danger">{d.gapMin ? hrs(d.gapMin) : '—'}</td>
+                  <td className="px-3 py-1.5 text-danger">{d.out ? '—' : d.gapMin ? hrs(d.gapMin) : '—'}</td>
                   <td className="px-3 py-1.5">{d.notes}</td>
                 </tr>
               ))}
@@ -130,8 +145,8 @@ export default function MarketDocumentation() {
   const rows = data?.rows || [];
   const totals = useMemo(() => rows.reduce((a, r) => ({
     covered: a.covered + r.coveredMin, overlap: a.overlap + r.overlapMin,
-    gap: a.gap + (r.hasRes ? r.gapMin : 0), inc: a.inc + r.incomplete
-  }), { covered: 0, overlap: 0, gap: 0, inc: 0 }), [rows]);
+    gap: a.gap + r.gapMin, inc: a.inc + r.incomplete, out: a.out + (r.outDays || 0)
+  }), { covered: 0, overlap: 0, gap: 0, inc: 0, out: 0 }), [rows]);
 
   return (
     <div className="space-y-4">
@@ -141,9 +156,10 @@ export default function MarketDocumentation() {
         <h1 className="text-xl font-semibold">Documentation by State</h1>
       </div>
       <p className="text-sm text-ink-muted">
-        For residential clients, a day is 24h to account for across residential + day-hab notes. Overnight shifts are split across
-        calendar days and times combined across a day’s notes. <b>Covered</b> = unique clock time documented (caps at 24h);
-        <b> Total</b> = summed across all notes; <b>Overlap</b> = double-documented time (total − covered). Residential notes are
+        For residential clients a day is 24h to account for. Overnight shifts are split across calendar days and times combined
+        across a day’s notes. <b>Covered</b> = unique clock time documented (caps at 24h); <b>Total</b> = summed across notes;
+        <b> Overlap</b> = double-documented time. Days the daily census shows the client was <b>out</b> (hospital, therapeutic
+        leave, vacation, temporary discharge, etc.) are excluded from the gap — those hours aren’t needed. Residential notes are
         pre-created shells; a shell with no last-modified date is a scheduled note not yet completed.
       </p>
 
@@ -178,35 +194,35 @@ export default function MarketDocumentation() {
             <Kpi label="Clients" value={rows.length} />
             <Kpi label="Covered hours" value={Math.round(totals.covered / 60)} sub={`${units(totals.covered)} units`} tone="success" />
             <Kpi label="Overlap (double-doc)" value={Math.round(totals.overlap / 60)} sub="hrs total − covered" tone={totals.overlap ? 'gold' : undefined} />
-            <Kpi label="Gap to 24h (res)" value={Math.round(totals.gap / 60)} sub={`${totals.inc} incomplete notes`} tone={totals.gap ? 'danger' : undefined} />
+            <Kpi label="Gap (needed hrs)" value={Math.round(totals.gap / 60)} sub={`${totals.out} out-days excluded · ${totals.inc} incomplete`} tone={totals.gap ? 'danger' : undefined} />
           </section>
 
           <section className="overflow-x-auto rounded border border-border bg-white">
             <table className="w-full text-left text-sm">
               <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
-                  <th className="px-3 py-2">Client</th><th className="px-3 py-2">Home</th>
+                  <th className="px-3 py-2">Client</th><th className="px-3 py-2">Home</th><th className="px-3 py-2">Program</th>
                   <th className="px-3 py-2">Days</th><th className="px-3 py-2">Covered hrs</th><th className="px-3 py-2">Units</th>
-                  <th className="px-3 py-2">Total hrs</th><th className="px-3 py-2">Overlap</th>
-                  <th className="px-3 py-2">Res hrs</th><th className="px-3 py-2">Day hrs</th>
-                  <th className="px-3 py-2">Gap 24h</th><th className="px-3 py-2">Days &lt;24h</th><th className="px-3 py-2">Incomplete</th>
+                  <th className="px-3 py-2">Total hrs</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Res hrs</th>
+                  <th className="px-3 py-2">Gap (needed)</th><th className="px-3 py-2">Days &lt;24h</th><th className="px-3 py-2">Out days</th><th className="px-3 py-2">Incomplete</th>
                 </tr>
               </thead>
               <tbody>
-                {!rows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={12}>No documentation for this state and range.</td></tr>}
+                {!rows.length && <tr><td className="px-3 py-3 text-ink-muted" colSpan={13}>No documentation for this state and range.</td></tr>}
                 {rows.map((r) => (
                   <tr key={r.clientId} className="cursor-pointer border-t border-border hover:bg-surface/50" onClick={() => setSelected(r.clientId)}>
                     <td className="px-3 py-1.5 font-medium text-beacon">{r.LastName}, {r.FirstName}</td>
                     <td className="px-3 py-1.5 text-ink-muted">{r.location || '—'}{r.locationCount > 1 ? <span className="ml-1 rounded bg-surface px-1 text-xs">+{r.locationCount - 1}</span> : ''}</td>
+                    <td className="px-3 py-1.5"><span className={`rounded px-1.5 py-0.5 text-xs ${MODE_TONE[r.mode] || 'bg-surface'}`}>{r.mode || '—'}</span></td>
                     <td className="px-3 py-1.5">{r.days}</td>
                     <td className="px-3 py-1.5 font-medium">{hrs(r.coveredMin)}</td>
                     <td className="px-3 py-1.5 tabular-nums">{units(r.coveredMin)}</td>
                     <td className="px-3 py-1.5">{hrs(r.totalMin)}</td>
                     <td className={`px-3 py-1.5 ${r.overlapMin ? 'font-medium text-gold-dark' : 'text-ink-muted'}`}>{r.overlapMin ? hrs(r.overlapMin) : '—'}</td>
                     <td className="px-3 py-1.5">{r.resMin ? hrs(r.resMin) : '—'}</td>
-                    <td className="px-3 py-1.5">{r.dayMin ? hrs(r.dayMin) : '—'}</td>
-                    <td className="px-3 py-1.5 text-danger">{r.hasRes ? hrs(r.gapMin) : '—'}</td>
-                    <td className="px-3 py-1.5">{r.hasRes ? r.daysUnder : '—'}</td>
+                    <td className="px-3 py-1.5 text-danger">{hrs(r.gapMin)}</td>
+                    <td className="px-3 py-1.5">{r.daysUnder}</td>
+                    <td className={`px-3 py-1.5 ${r.outDays ? 'font-medium text-ink' : 'text-ink-muted'}`}>{r.outDays || '—'}</td>
                     <td className={`px-3 py-1.5 font-medium ${r.incomplete ? 'text-danger' : 'text-ink-muted'}`}>{r.incomplete || '—'}</td>
                   </tr>
                 ))}
