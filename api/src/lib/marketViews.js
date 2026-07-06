@@ -124,7 +124,7 @@ async function fetchSpans({ state, from, toEnd, cid }) {
   const p = cid ? { state, from, toEnd, cid: parseInt(cid, 10) } : { state, from, toEnd };
   return c360Query(`
     SELECT n.ClientID AS cid, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT, 'R' AS typ,
-           CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc, loc.LocationName AS facility, n.ServiceDate AS svcDate
+           CASE WHEN n.LastModifiedOn IS NULL AND n.SubmissionStatus IS NULL THEN 1 ELSE 0 END AS inc, loc.LocationName AS facility, n.ServiceDate AS svcDate
     FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
     WHERE loc.State = @state AND n.ServiceDate >= @from AND n.ServiceDate < @toEnd ${where}
     UNION ALL
@@ -138,7 +138,7 @@ async function fetchSpans({ state, from, toEnd, cid }) {
 async function fetchClientNotes({ state, from, toEnd, cid }) {
   return c360Query(`SELECT n.BSL_ResidentialServiceNoteID AS id, n.ServiceStartTime AS startT, n.ServiceEndTime AS endT,
       n.ServiceDate AS svcDate, n.Duration AS dur, n.SubmissionStatus AS sub, 'R' AS typ,
-      CASE WHEN n.LastModifiedOn IS NULL THEN 1 ELSE 0 END AS inc,
+      CASE WHEN n.LastModifiedOn IS NULL AND n.SubmissionStatus IS NULL THEN 1 ELSE 0 END AS inc,
       loc.LocationName AS facility, loc.State AS state,
       au.FirstName + ' ' + au.LastName AS author, mo.FirstName + ' ' + mo.LastName AS modBy
     FROM ${RES} n JOIN ${LOC} loc ON n.Location = loc.LocationID
