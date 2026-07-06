@@ -39,6 +39,7 @@ export function putJson(path, body) {
 // Convenience endpoints
 export const api = {
   me: () => getJson('/api/users/me'),
+  savePrefs: (patch) => putJson('/api/users/me/preferences', patch),
   metricsOverview: () => getJson('/api/metrics/overview'),
   ask: (question) => postJson('/api/assistant/ask', { question }),
   // Client display — initials only, live, never cached client-side.

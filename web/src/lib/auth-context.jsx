@@ -42,7 +42,14 @@ export function AuthProvider({ children }) {
     return () => { cancelled = true; };
   }, []);
 
-  const value = useMemo(() => ({ user, settings, loading, error }), [user, settings, loading, error]);
+  // Persist per-user UI preferences (table columns/sort). Updates local state
+  // immediately (optimistic) and writes to the profile doc in the background.
+  const savePreferences = async (patch) => {
+    setUser((u) => (u ? { ...u, preferences: { ...(u.preferences || {}), ...patch } } : u));
+    try { await api.savePrefs(patch); } catch { /* non-fatal — local state still applied */ }
+  };
+
+  const value = useMemo(() => ({ user, settings, loading, error, savePreferences }), [user, settings, loading, error]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

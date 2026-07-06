@@ -51,3 +51,34 @@ app.http('usersMe', {
     return { status: 200, jsonBody: profile };
   }
 });
+
+// PUT /api/users/me/preferences — persist per-user UI preferences (e.g. table
+// columns + sort) on the profile doc so they follow the user across browsers.
+// Body is a shallow patch merged under profile.preferences (per-view keys).
+const PREF_KEYS = new Set(['incidents', 'marketDoc', 'residential']);
+
+app.http('usersMePreferences', {
+  methods: ['PUT'],
+  authLevel: 'anonymous',
+  route: 'users/me/preferences',
+  handler: async (request) => {
+    const principal = requireAuth(request);
+    const patch = await request.json().catch(() => null);
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return { status: 400, jsonBody: { error: 'preferences must be an object' } };
+    }
+    if (JSON.stringify(patch).length > 8000) {
+      return { status: 413, jsonBody: { error: 'preferences too large' } };
+    }
+    const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => PREF_KEYS.has(k)));
+
+    const users = repo('users');
+    const profile = await users.get(principal.userId, 'users');
+    if (!profile) return { status: 404, jsonBody: { error: 'no profile to update' } };
+
+    profile.preferences = { ...(profile.preferences || {}), ...clean };
+    profile.updatedAt = new Date().toISOString();
+    const saved = await users.upsert(profile);
+    return { status: 200, jsonBody: { preferences: saved.preferences } };
+  }
+});

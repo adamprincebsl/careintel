@@ -109,30 +109,47 @@ const COLUMNS = [
   { key: 'IncidentId', label: 'Incident #', sort: 'num' }
 ];
 const DEFAULT_COLS = ['IncidentDate', 'ClientInitials', 'IncidentTypes', 'SeverityOfInjury', 'PlaceOfIncident', 'Facility', 'State', 'AbuseNeglect'];
-const loadLS = (k, fallback) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? fallback; } catch { return fallback; } };
+
+// Build + download a CSV of the given rows for the visible columns.
+function downloadCsv(rows, cols) {
+  const esc = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const header = cols.map((c) => esc(c.label)).join(',');
+  const body = rows.map((r) => cols.map((c) => esc(fmt(r[c.key]) ?? '')).join(',')).join('\n');
+  const blob = new Blob([header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `incidents-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export default function Incidents() {
-  const { user } = useAuth();
+  const { user, savePreferences } = useAuth();
   const canPhi = can(user, 'note.viewPhi');
+  const prefs = user?.preferences?.incidents;
   const [f, setF] = useState({ type: '', severity: '', facility: '', state: '', program: '', from: '', to: '' });
   const [applied, setApplied] = useState(f);
   const [selected, setSelected] = useState(null);
   const [page, setPage] = useState(0);
-  const [sort, setSort] = useState(() => loadLS('inc-sort', { key: 'IncidentDate', dir: 'desc' }));
-  const [visible, setVisible] = useState(() => {
-    const v = loadLS('inc-cols', DEFAULT_COLS);
-    return Array.isArray(v) && v.length ? v : DEFAULT_COLS;
-  });
+  const [sort, setSort] = useState(() => prefs?.sort || { key: 'IncidentDate', dir: 'desc' });
+  const [visible, setVisible] = useState(() => (Array.isArray(prefs?.columns) && prefs.columns.length ? prefs.columns : DEFAULT_COLS));
   const [pickerOpen, setPickerOpen] = useState(false);
   const PAGE_SIZE = 50;
 
-  useEffect(() => { localStorage.setItem('inc-sort', JSON.stringify(sort)); }, [sort]);
-  useEffect(() => { localStorage.setItem('inc-cols', JSON.stringify(visible)); }, [visible]);
   useEffect(() => { setPage(0); }, [sort]);
 
   const cols = COLUMNS.filter((c) => visible.includes(c.key));
-  const toggleSort = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }));
-  const toggleCol = (key) => setVisible((v) => (v.includes(key) ? v.filter((k) => k !== key) : [...v, key]));
+  // Persist prefs to the user profile (follows the user across browsers).
+  const persistPrefs = (next) => savePreferences({ incidents: { columns: next.columns ?? visible, sort: next.sort ?? sort } });
+  const toggleSort = (key) => {
+    const n = sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
+    setSort(n); persistPrefs({ sort: n });
+  };
+  const toggleCol = (key) => {
+    const n = visible.includes(key) ? visible.filter((k) => k !== key) : [...visible, key];
+    setVisible(n); persistPrefs({ columns: n });
+  };
+  const resetCols = () => { setVisible(DEFAULT_COLS); persistPrefs({ columns: DEFAULT_COLS }); };
 
   const { data: opts } = useQuery({ queryKey: ['inc-options'], queryFn: api.incOptions });
   const qs = new URLSearchParams(Object.entries(applied).filter(([, v]) => v)).toString();
@@ -248,16 +265,22 @@ export default function Incidents() {
       <section className="rounded border border-border bg-white">
         <div className="relative flex items-center justify-between border-b border-border px-3 py-2">
           <span className="text-sm font-medium">{sortedRows.length} incident{sortedRows.length === 1 ? '' : 's'}</span>
-          <button onClick={() => setPickerOpen((o) => !o)} className="flex items-center gap-1.5 rounded border border-border px-2 py-1 text-xs font-medium hover:bg-surface">
-            <Columns3 className="h-4 w-4" /> Columns
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => downloadCsv(sortedRows, cols)} disabled={!sortedRows.length}
+              className="flex items-center gap-1.5 rounded border border-border px-2 py-1 text-xs font-medium hover:bg-surface disabled:opacity-40">
+              <FileDown className="h-4 w-4" /> CSV
+            </button>
+            <button onClick={() => setPickerOpen((o) => !o)} className="flex items-center gap-1.5 rounded border border-border px-2 py-1 text-xs font-medium hover:bg-surface">
+              <Columns3 className="h-4 w-4" /> Columns
+            </button>
+          </div>
           {pickerOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
               <div className="absolute right-3 top-10 z-20 w-60 rounded border border-border bg-white p-2 shadow-lg">
                 <div className="mb-1 flex items-center justify-between px-1">
                   <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Show columns</span>
-                  <button onClick={() => setVisible(DEFAULT_COLS)} className="text-xs text-beacon hover:underline">Reset</button>
+                  <button onClick={resetCols} className="text-xs text-beacon hover:underline">Reset</button>
                 </div>
                 <div className="max-h-72 overflow-y-auto">
                   {COLUMNS.map((c) => (

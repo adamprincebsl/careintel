@@ -61,6 +61,8 @@ export function buildUserDoc({ oid, name, email, roles, permissions, clientScope
     clientScope: finalScope,
     provisioned: finalRoles.length > 0 || finalPerms.length > 0,
     createdAt: merged.createdAt || now,
-    updatedAt: now
+    updatedAt: now,
+    // Preserve per-user UI preferences across admin edits (set via /users/me/preferences).
+    ...(merged.preferences ? { preferences: merged.preferences } : {})
   };
 }
