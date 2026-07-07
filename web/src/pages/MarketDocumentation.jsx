@@ -147,7 +147,7 @@ function Kpi({ label, value, sub, tone }) {
 export default function MarketDocumentation() {
   const { user } = useAuth();
   const canPhi = can(user, 'note.viewPhi');
-  const [f, setF] = useState({ state: '', facility: '', from: DEFAULT_FROM, to: DEFAULT_TO });
+  const [f, setF] = useState({ state: '', facility: '', status: '', from: DEFAULT_FROM, to: DEFAULT_TO });
   const [applied, setApplied] = useState(null);
   const [selected, setSelected] = useState(null);
 
@@ -194,6 +194,17 @@ export default function MarketDocumentation() {
             className="mt-1 block w-56 rounded border border-border px-2 py-1 text-sm disabled:opacity-50">
             <option value="">All homes{f.state ? ` (${stateFacilities.length})` : ''}</option>
             {stateFacilities.map((fac) => <option key={fac.id} value={fac.id}>{fac.name}</option>)}
+          </select>
+        </label>
+        <label className="text-xs text-ink-muted">Status
+          <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className="mt-1 block w-40 rounded border border-border px-2 py-1 text-sm">
+            <option value="">All statuses</option>
+            <option value="documented">Documented (any)</option>
+            <option value="saved">Saved</option>
+            <option value="submitted">Submitted</option>
+            <option value="approved">Approved</option>
+            <option value="feedback">Feedback</option>
+            <option value="scheduled">Scheduled (incomplete)</option>
           </select>
         </label>
         <label className="text-xs text-ink-muted">From

@@ -10,7 +10,7 @@ import { logAccess } from '../lib/audit.js';
 import { marketOptions, marketDocRoster, marketClientDetail } from '../lib/marketViews.js';
 
 const NO_STORE = { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
-const paramsFrom = (q) => ({ state: q.get('state') ?? undefined, from: q.get('from') ?? undefined, to: q.get('to') ?? undefined, facility: q.get('facility') || undefined });
+const paramsFrom = (q) => ({ state: q.get('state') ?? undefined, from: q.get('from') ?? undefined, to: q.get('to') ?? undefined, facility: q.get('facility') || undefined, status: q.get('status') || undefined });
 const c360Fail = (context, err) => { context.warn(`market-doc failed: ${err.message}`); return { status: 502, headers: NO_STORE, jsonBody: { error: 'c360 unavailable', detail: err.message } }; };
 
 app.http('marketDocOptions', {
