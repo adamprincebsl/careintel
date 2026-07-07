@@ -9,7 +9,7 @@ const off = 'text-white/80 hover:bg-white/10 hover:text-white';
 const navClass = ({ isActive }) => `${linkBase} ${isActive ? on : off}`;
 
 // Compliance is a module spanning several routes; highlight it across all of them.
-const COMPLIANCE_RE = /^\/c360(\/(incidents|incident-compliance|incident-rules|residential|market-documentation))?$/;
+const COMPLIANCE_RE = /^\/c360(\/(incidents|incident-compliance|incident-rules|residential|market-documentation|enhanced-staffing))?$/;
 
 export default function TopNav() {
   const { user, settings } = useAuth();

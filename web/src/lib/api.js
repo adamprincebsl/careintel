@@ -68,6 +68,10 @@ export const api = {
   marketDocOptions: () => getJson('/api/c360/market-doc/options'),
   marketDocRoster: (qs) => getJson('/api/c360/market-doc/roster' + (qs ? `?${qs}` : '')),
   marketDocClient: (id, qs) => getJson(`/api/c360/market-doc/client/${encodeURIComponent(id)}` + (qs ? `?${qs}` : '')),
+  // Enhanced (1:1/2:1) staffing coverage
+  enhancedOptions: () => getJson('/api/c360/enhanced/options'),
+  enhancedRoster: (qs) => getJson('/api/c360/enhanced/roster' + (qs ? `?${qs}` : '')),
+  enhancedClient: (id, qs) => getJson(`/api/c360/enhanced/client/${encodeURIComponent(id)}` + (qs ? `?${qs}` : '')),
   // Incident workflow (tasks in app Cosmos) + compliance signals
   incTasks: (id) => getJson(`/api/c360/incidents/${encodeURIComponent(id)}/tasks`),
   incTaskCreate: (id, body) => postJson(`/api/c360/incidents/${encodeURIComponent(id)}/tasks`, body),

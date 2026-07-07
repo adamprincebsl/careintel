@@ -17,6 +17,7 @@ import ClientView from './pages/ClientView';
 import IncidentCompliance from './pages/IncidentCompliance';
 import IncidentRules from './pages/IncidentRules';
 import MarketDocumentation from './pages/MarketDocumentation';
+import EnhancedStaffing from './pages/EnhancedStaffing';
 
 export default function App() {
   const { loading, error, user } = useAuth();
@@ -63,6 +64,7 @@ export default function App() {
           <Route path="/c360/incident-rules" element={<IncidentRules />} />
           <Route path="/c360/client" element={<ClientView />} />
           <Route path="/c360/market-documentation" element={<MarketDocumentation />} />
+          <Route path="/c360/enhanced-staffing" element={<EnhancedStaffing />} />
           <Route path="/c360/explore" element={<C360Explore />} />
           <Route path="/clients" element={<ClientDetail />} />
           <Route path="/admin/users" element={<AdminUsers />} />
