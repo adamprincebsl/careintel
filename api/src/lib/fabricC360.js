@@ -49,7 +49,7 @@ async function createPool() {
       type: 'azure-active-directory-access-token',
       options: { token: tokenResponse.token }
     },
-    pool: { max: 5, min: 0, idleTimeoutMillis: 30_000 },
+    pool: { max: 12, min: 0, idleTimeoutMillis: 30_000 },
     connectionTimeout: 30_000,
     requestTimeout: 60_000
   };

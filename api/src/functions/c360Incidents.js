@@ -60,12 +60,16 @@ app.http('incidentFull', {
   handler: async (request, context) => {
     const { principal } = await authorize(request, 'note.viewPhi');
     const id = request.params.id;
-    let incident;
-    try { incident = await getIncidentIdentified(id); }
-    catch (err) { return { status: 502, headers: NO_STORE, jsonBody: { error: 'c360 unavailable', detail: err.message } }; }
+    let incident, subforms = {};
+    // Identified detail + all subforms fetched concurrently (pooled).
+    try {
+      const [inc, subs] = await Promise.all([
+        getIncidentIdentified(id),
+        getIncidentSubforms(id).catch((err) => { context.warn(`incident subforms failed: ${err.message}`); return {}; })
+      ]);
+      incident = inc; subforms = subs;
+    } catch (err) { return { status: 502, headers: NO_STORE, jsonBody: { error: 'c360 unavailable', detail: err.message } }; }
     if (!incident) return { status: 404, headers: NO_STORE, jsonBody: { error: 'incident not found' } };
-    let subforms = {};
-    try { subforms = await getIncidentSubforms(id); } catch (err) { context.warn(`incident subforms failed: ${err.message}`); }
     try { await logAccess({ actor: principal, action: 'view-incident-phi', clientId: incident.IndividualRef ?? id, outcome: 'granted' }); }
     catch (err) { context.error(`incident PHI access log failed: ${err.message}`); return { status: 503, headers: NO_STORE, jsonBody: { error: 'unable to record access; not served' } }; }
     return { status: 200, headers: NO_STORE, jsonBody: { incident, subforms } };

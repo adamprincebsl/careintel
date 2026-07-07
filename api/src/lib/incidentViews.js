@@ -289,11 +289,15 @@ export async function evaluateRule(rule) {
 
 export async function getIncidentSubforms(id) {
   const iid = parseInt(id, 10);
-  const out = {};
-  for (const [key, tbl] of SUBFORMS) {
+  // Run every subform lookup concurrently (pooled) instead of one-at-a-time —
+  // ~9 serial Fabric round-trips was the slow part of opening an incident.
+  const jobs = SUBFORMS.map(async ([key, tbl]) => {
     const rows = await c360Query(`SELECT TOP 1 * FROM dbo.${tbl} WHERE BSL_IncidentID = @id`, { id: iid }).catch(() => []);
-    out[key] = rows[0] || null;
-  }
-  out.witness = await c360Query(`SELECT * FROM dbo.BSLVA_IncidentWitnessInvestigation WHERE BSL_IncidentID = @id`, { id: iid }).catch(() => []);
+    return [key, rows[0] || null];
+  });
+  const witnessJob = c360Query(`SELECT * FROM dbo.BSLVA_IncidentWitnessInvestigation WHERE BSL_IncidentID = @id`, { id: iid }).catch(() => []);
+  const [entries, witness] = await Promise.all([Promise.all(jobs), witnessJob]);
+  const out = Object.fromEntries(entries);
+  out.witness = witness;
   return out;
 }
