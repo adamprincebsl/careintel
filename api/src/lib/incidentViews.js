@@ -116,25 +116,34 @@ export async function queryIncidentsStructured(f = {}) {
     ORDER BY i.DateofIncident DESC`, params);
 }
 
+// Incident columns that are UDO codes, mapped to their output alias. Resolved in
+// a single lookup (not 21 correlated subqueries — Fabric plans those O(n^2): 3
+// subqueries ~0.7s but all 21 ~44s, which blew past the 60s timeout -> 502).
+const IDENT_UDO = [
+  ['AntagonistVictim', 'AntagonistVictim'],
+  ['AbuseNeglectType', 'AbuseNeglectType'], ['AccidentMedicalIncidentType', 'AccidentMedicalType'],
+  ['MedVarianceType', 'MedVarianceType'], ['MedErrorType', 'MedErrorType'],
+  ['IllnessType', 'IllnessType'], ['BehaviorIncidentType', 'BehaviorIncidentType'],
+  ['BehaviorCause', 'BehaviorCause'], ['BehaviorDuration', 'BehaviorDuration'],
+  ['BehaviorIntensity', 'BehaviorIntensity'], ['BehaviorInterventions', 'BehaviorInterventions'],
+  ['Outcome', 'BehaviorOutcome'], ['RestraintTypeUsed', 'RestraintType'], ['PhysicalAggressionType', 'PhysicalAggressionType'],
+  ['InjuryType', 'InjuryType'], ['InjuryLocationPrimaryAreaoftheBody', 'InjuryAreaPrimary'],
+  ['InjuryLocationSpecificAreaoftheBody', 'InjuryAreaSpecific'],
+  ['TreatmentProvidedBy', 'TreatmentProvidedBy'], ['MedicalInterventions', 'MedicalInterventions'],
+  ['Wasseizureprotocolfollowed', 'SeizureProtocolFollowed'], ['SeizureDetails', 'SeizureDetails']
+];
+
 // Identified detail (PHI narrative). Caller gates note.viewPhi + audits.
 export async function getIncidentIdentified(id) {
+  const udidCols = IDENT_UDO.map(([src, alias]) => `i.[${src}] AS [udid_${alias}]`).join(', ');
   const rows = await c360Query(`SELECT TOP 1
     i.BSL_IncidentID AS IncidentId, ${INCIDENT_DATE} AS IncidentDate, i.TimeofIncident,
     ${TYPES_AGG} AS IncidentTypes,
     cl.ClientID AS ClientId, cl.FirstName AS ClientFirstName, cl.LastName AS ClientLastName, cl.BirthDate AS ClientBirthDate,
-    sev.UDDescription AS SeverityOfInjury, ${udo('AntagonistVictim')} AS AntagonistVictim,
+    sev.UDDescription AS SeverityOfInjury,
     pl.UDDescription AS PlaceOfIncident, i.OtherLocation,
     loc.LocationName AS Facility, loc.State AS State,
-    ${udo('AbuseNeglectType')} AS AbuseNeglectType, ${udo('AccidentMedicalIncidentType')} AS AccidentMedicalType,
-    ${udo('MedVarianceType')} AS MedVarianceType, ${udo('MedErrorType')} AS MedErrorType,
-    ${udo('IllnessType')} AS IllnessType, ${udo('BehaviorIncidentType')} AS BehaviorIncidentType,
-    ${udo('BehaviorCause')} AS BehaviorCause, ${udo('BehaviorDuration')} AS BehaviorDuration,
-    ${udo('BehaviorIntensity')} AS BehaviorIntensity, ${udo('BehaviorInterventions')} AS BehaviorInterventions,
-    ${udo('Outcome')} AS BehaviorOutcome, ${udo('RestraintTypeUsed')} AS RestraintType, ${udo('PhysicalAggressionType')} AS PhysicalAggressionType,
-    ${udo('InjuryType')} AS InjuryType, ${udo('InjuryLocationPrimaryAreaoftheBody')} AS InjuryAreaPrimary,
-    ${udo('InjuryLocationSpecificAreaoftheBody')} AS InjuryAreaSpecific,
-    ${udo('TreatmentProvidedBy')} AS TreatmentProvidedBy, ${udo('MedicalInterventions')} AS MedicalInterventions,
-    ${udo('Wasseizureprotocolfollowed')} AS SeizureProtocolFollowed, ${udo('SeizureDetails')} AS SeizureDetails,
+    ${udidCols},
     i.SeizureStartTime, i.SeizureEndTime,
     i.Definedasachokingevent_ AS ChokingEvent, i.Whatdidtheindividualchokeon AS ChokedOn,
     i.Whatwastheindividualdoingatthetimeofthechokingincident AS ChokingActivity,
@@ -156,7 +165,19 @@ export async function getIncidentIdentified(id) {
     LEFT JOIN ${UDO} pl ON i.LocationofIncident = pl.UDID
     LEFT JOIN ${LOC} loc ON i.HomeFacility = loc.LocationID
     WHERE i.BSL_IncidentID = @id`, { id: parseInt(id, 10) });
-  return rows[0] || null;
+  const row = rows[0];
+  if (!row) return null;
+
+  // Resolve every UDO code in one lookup, then replace the raw udid_* fields.
+  const codes = [...new Set(IDENT_UDO.map(([, a]) => row[`udid_${a}`]).filter((v) => v != null))];
+  const map = new Map();
+  if (codes.length) {
+    const params = Object.fromEntries(codes.map((v, i) => [`u${i}`, v]));
+    const lk = await c360Query(`SELECT UDID, UDDescription FROM ${UDO} WHERE UDID IN (${codes.map((_, i) => `@u${i}`).join(',')})`, params).catch(() => []);
+    for (const r of lk) map.set(r.UDID, r.UDDescription);
+  }
+  for (const [, alias] of IDENT_UDO) { row[alias] = map.get(row[`udid_${alias}`]) ?? null; delete row[`udid_${alias}`]; }
+  return row;
 }
 
 // Child + workflow sub-forms for one incident (each linked by BSL_IncidentID).
