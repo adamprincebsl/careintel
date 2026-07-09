@@ -38,7 +38,9 @@ function range({ from, to } = {}) {
   const end = to ? new Date(to + 'T00:00:00Z') : new Date();
   const start = from ? new Date(from + 'T00:00:00Z') : new Date(end.getTime() - 30 * MS_DAY);
   const iso = (d) => d.toISOString().slice(0, 10);
-  return { from: iso(start), toEnd: iso(new Date(end.getTime() + MS_DAY)) };
+  // fetchFrom pulls one extra prior day so the first in-range day's early-morning
+  // hours (from the previous night's shift) are covered; display clamps to [from,toEnd).
+  return { from: iso(start), toEnd: iso(new Date(end.getTime() + MS_DAY)), fetchFrom: iso(new Date(start.getTime() - MS_DAY)) };
 }
 
 export async function marketOptions() {
@@ -85,30 +87,60 @@ function intersectMin(A, B) {
 }
 const dominant = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
+// Beacon operates in Eastern + Central states; overnight hours are split at the
+// facility's LOCAL midnight so they land in the correct calendar day.
+const CENTRAL_STATES = new Set(['MO', 'Missouri', 'IL', 'Illinois', 'WI', 'Wisconsin', 'MN', 'Minnesota', 'IA', 'Iowa', 'TX', 'Texas', 'KS', 'Kansas', 'NE', 'Nebraska', 'OK', 'Oklahoma', 'AR', 'Arkansas', 'LA', 'Louisiana', 'ND', 'North Dakota', 'SD', 'South Dakota']);
+export const tzFor = (state) => (state && CENTRAL_STATES.has(String(state).trim()) ? 'America/Chicago' : 'America/New_York');
+// Offset (ms) to add to a UTC instant to get local wall-clock expressed as UTC.
+function tzOffsetMs(ms, tz) {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    .formatToParts(new Date(ms)).reduce((a, x) => { a[x.type] = x.value; return a; }, {});
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+}
+// Split a local-ms interval at local midnights → [dayKey, start, end] per day.
+function slicesLocal(ls, le) {
+  const out = [];
+  let cur = ls;
+  while (cur < le) {
+    const d = new Date(cur);
+    const mid = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+    const se = Math.min(le, mid);
+    out.push([dayKey(cur), cur, se]);
+    cur = se;
+  }
+  return out;
+}
+
 // A note is complete/"saved" when LastModifiedOn is set (n.inc = 0); otherwise
 // it's a scheduled shell (n.inc = 1). Coverage/overlap use documented notes only.
 const noteStatus = (n) => (n.inc ? 'Scheduled' : n.sub === 1015 ? 'Submitted' : n.sub === 1017 ? 'Approved' : n.sub === 1016 ? 'Feedback' : 'Saved');
 
-// Group notes by their ServiceDate (the business day) and union each documented
-// note's full span (overnight rollover applied). A note is attributed wholly to
-// its service date — no splitting at calendar/UTC midnight — so a night shift
-// (7pm–7:30am) counts toward the day it serves. Covered caps at 24h.
-function perDayFromNotes(notes) {
+// Roll documented notes into per-CALENDAR-DAY coverage. Each note's span is
+// overnight-corrected then split at the facility's LOCAL midnight, so a night
+// shift (7pm→7:30am) puts its evening hours on one day and its morning hours on
+// the next. Covered caps at 24h/day. tz = facility timezone.
+function perDayFromNotes(notes, tz = 'America/New_York', clampFrom = null, clampToEnd = null) {
   const days = {};
   const nd = () => ({ res: [], day: [], doc: 0, inc: 0, fac: {} });
   for (const n of notes) {
-    const k = n.svcDate ? dayKey(new Date(n.svcDate).getTime()) : (n.startT ? dayKey(new Date(n.startT).getTime()) : null);
-    if (!k) continue;
-    const d = (days[k] ||= nd());
-    if (n.inc) d.inc++; else d.doc++;
-    if (n.facility) d.fac[n.facility] = (d.fac[n.facility] || 0) + 1;
+    // Count doc/inc + facility at the reliable ServiceDate (shells can carry
+    // garbage ServiceStartTime). Coverage below uses the real start/end times.
+    const k0 = n.svcDate ? dayKey(new Date(n.svcDate).getTime()) : (n.startT ? dayKey(new Date(n.startT).getTime() + tzOffsetMs(new Date(n.startT).getTime(), tz)) : null);
+    if (k0) {
+      const d0 = (days[k0] ||= nd());
+      if (n.inc) d0.inc++; else d0.doc++;
+      if (n.facility) d0.fac[n.facility] = (d0.fac[n.facility] || 0) + 1;
+    }
     if (n.inc) continue; // coverage from documented (saved) notes only — skip shells
     const span = normSpan(n.startT, n.endT);
-    if (span) (n.typ === 'D' ? d.day : d.res).push(span);
+    if (!span) continue;
+    const off = tzOffsetMs(span[0], tz);
+    for (const [k, s, e] of slicesLocal(span[0] + off, span[1] + off)) {
+      const d = (days[k] ||= nd());
+      (n.typ === 'D' ? d.day : d.res).push([s, e]);
+    }
   }
-  let incompleteRes = 0, documented = 0;
-  const rows = Object.entries(days).map(([day, d]) => {
-    incompleteRes += d.inc; documented += d.doc;
+  let rows = Object.entries(days).map(([day, d]) => {
     const resU = merge(d.res), dayU = merge(d.day), allU = merge([...d.res, ...d.day]);
     const coveredU = unionMin(allU);
     const rawMin = Math.round([...d.res, ...d.day].reduce((s, [a, b]) => s + (b - a), 0) / MS_MIN);
@@ -120,7 +152,10 @@ function perDayFromNotes(notes) {
       resDayOverlapMin: intersectMin(resU, dayU),
       doc: d.doc, inc: d.inc, location: dominant(d.fac)
     };
-  }).sort((a, b) => (a.day < b.day ? 1 : -1));
+  }).filter((r) => (!clampFrom || r.day >= clampFrom) && (!clampToEnd || r.day < clampToEnd))
+    .sort((a, b) => (a.day < b.day ? 1 : -1));
+  const incompleteRes = rows.reduce((a, r) => a + r.inc, 0);
+  const documented = rows.reduce((a, r) => a + r.doc, 0);
   return { rows, incompleteRes, documented };
 }
 
@@ -234,10 +269,11 @@ async function fetchPrograms(cid) {
 
 // Roster: per-client rollup, absence-aware (out-days excluded from the gap).
 export async function marketDocRoster(params) {
-  const { from, toEnd } = range(params);
+  const { from, toEnd, fetchFrom } = range(params);
   const facility = params.facility;
+  const tz = tzFor(params.state);
   const [spans, censusMap] = await Promise.all([
-    fetchSpans({ state: params.state, from, toEnd, facility, status: params.status }),
+    fetchSpans({ state: params.state, from: fetchFrom, toEnd, facility, status: params.status }),
     fetchCensusOutDays({ state: params.state, from, toEnd, facility })
   ]);
   const byClient = new Map();
@@ -245,24 +281,33 @@ export async function marketDocRoster(params) {
 
   const rows = [];
   for (const [cid, notes] of byClient) {
-    const { rows: pd, incompleteRes, documented } = perDayFromNotes(notes);
+    const { rows: pd, incompleteRes, documented } = perDayFromNotes(notes, tz, from, toEnd);
     const outMap = censusMap.get(cid) || {};
-    let coveredMin = 0, totalMin = 0, resMin = 0, dayMin = 0, overlapMin = 0, gapMin = 0, daysUnder = 0, outDays = 0;
+    // Expected = 24h for each calendar day with documentation (out-days excluded).
+    // documentedMin + gapMin = expectedMin, so the math reconciles.
+    let coveredMin = 0, totalMin = 0, resMin = 0, dayMin = 0, overlapMin = 0;
+    let expectedMin = 0, documentedMin = 0, gapMin = 0, daysUnder = 0, outDays = 0, coveredDays = 0;
     const noteDays = new Set();
     for (const d of pd) {
       noteDays.add(d.day);
       coveredMin += d.coveredMin; totalMin += d.rawMin; resMin += d.resMin; dayMin += d.dayMin; overlapMin += d.overlapMin;
       if (outMap[d.day]) { outDays++; continue; } // out — 24h not needed
-      gapMin += Math.max(0, DAY_MIN - d.coveredMin);
+      coveredDays++;
+      expectedMin += DAY_MIN;
+      documentedMin += d.coveredMin;
+      gapMin += DAY_MIN - d.coveredMin;
       if (d.coveredMin < DAY_MIN) daysUnder++;
     }
     for (const k of Object.keys(outMap)) if (!noteDays.has(k)) outDays++; // absences with no shell
     const facCounts = {};
     for (const n of notes) if (n.facility) facCounts[n.facility] = (facCounts[n.facility] || 0) + 1;
     rows.push({
-      clientId: cid, days: pd.length, documented, incomplete: incompleteRes, hasRes: resMin > 0,
+      clientId: cid, days: pd.length, coveredDays, documented, incomplete: incompleteRes, hasRes: resMin > 0,
       location: dominant(facCounts), locationCount: Object.keys(facCounts).length,
-      coveredMin, totalMin, resMin, dayMin, overlapMin, gapMin, daysUnder, outDays
+      coveredMin, totalMin, resMin, dayMin, overlapMin,
+      expectedMin, documentedMin, gapMin,
+      pctDocumented: expectedMin ? Math.round((documentedMin / expectedMin) * 100) : null,
+      daysUnder, outDays
     });
   }
 
@@ -285,17 +330,17 @@ export async function marketDocRoster(params) {
 // + the incomplete scheduled shells.
 export async function marketClientDetail(params) {
   const cid = parseInt(params.clientId, 10);
-  const { from, toEnd } = range(params);
+  const { from, toEnd, fetchFrom } = range(params);
   const facility = params.facility;
   const [clientRows, noteRows, censusMap, programs] = await Promise.all([
     c360Query(`SELECT TOP 1 ClientID, FirstName, LastName, BirthDate FROM dbo.c_Client WHERE ClientID = @cid`, { cid }).catch(() => []),
-    fetchClientNotes({ state: params.state, from, toEnd, cid, facility, status: params.status }),
+    fetchClientNotes({ state: params.state, from: fetchFrom, toEnd, cid, facility, status: params.status }),
     fetchCensusOutDays({ state: params.state, from, toEnd, cid, facility }),
     fetchPrograms(cid)
   ]);
   const client = clientRows[0] || null;
   const outMap = censusMap.get(cid) || {};
-  const { rows: byDayRaw } = perDayFromNotes(noteRows);
+  const { rows: byDayRaw } = perDayFromNotes(noteRows, tzFor(params.state), from, toEnd);
   const byDay = byDayRaw.map((d) => {
     const outReason = outMap[d.day] || null;
     const expectedMin = outReason ? 0 : DAY_MIN;

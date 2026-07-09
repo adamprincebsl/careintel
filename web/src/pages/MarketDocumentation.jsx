@@ -160,9 +160,10 @@ export default function MarketDocumentation() {
 
   const rows = data?.rows || [];
   const totals = useMemo(() => rows.reduce((a, r) => ({
-    covered: a.covered + r.coveredMin, overlap: a.overlap + r.overlapMin,
-    gap: a.gap + r.gapMin, inc: a.inc + r.incomplete, out: a.out + (r.outDays || 0)
-  }), { covered: 0, overlap: 0, gap: 0, inc: 0, out: 0 }), [rows]);
+    documented: a.documented + (r.documentedMin || 0), expected: a.expected + (r.expectedMin || 0),
+    overlap: a.overlap + r.overlapMin, gap: a.gap + r.gapMin, inc: a.inc + r.incomplete, out: a.out + (r.outDays || 0)
+  }), { documented: 0, expected: 0, overlap: 0, gap: 0, inc: 0, out: 0 }), [rows]);
+  const pctTotal = totals.expected ? Math.round((totals.documented / totals.expected) * 100) : null;
 
   return (
     <div className="space-y-4">
@@ -172,12 +173,12 @@ export default function MarketDocumentation() {
         <h1 className="text-xl font-semibold">Documentation by State</h1>
       </div>
       <p className="text-sm text-ink-muted">
-        For residential clients a day is 24h to account for. A note counts as <b>documented</b> once it’s saved (has a
-        last-modified date); notes with no last-modified date are scheduled <b>shells</b> (incomplete) and don’t count toward
-        hours. <b>Covered</b> = unique clock time from documented notes (overnights split, caps at 24h); <b>Overlap</b> =
-        double-documented time. Days the daily census shows the client was <b>out</b> (hospital, therapeutic leave, vacation,
-        temporary discharge, etc.) are excluded from the gap. Click a client → then a day to see the individual notes: who wrote
-        each, how long, and its status (Submitted / Approved / Saved / Scheduled).
+        Each calendar day is <b>24h to document against</b>. Overnight shifts are split at the home’s <b>local</b> midnight so
+        hours land on the correct day (a 7pm–7:30am shift covers the evening of one day and the morning of the next).
+        <b> Documented</b> = unique hours covered by saved notes that day (caps at 24h); <b>Expected</b> = 24 × days;
+        <b> Gap</b> = Expected − Documented (so the math reconciles). Notes with no last-modified date are scheduled
+        <b> shells</b> (incomplete) and don’t count. Days the census shows the client was <b>out</b> are excluded. Click a
+        client → a day to see who documented each shift and how long.
       </p>
 
       {!canPhi && <p className="rounded border border-gold bg-gold-tint px-3 py-2 text-sm text-gold-dark">You don’t have permission to view client documentation (PHI).</p>}
@@ -229,8 +230,8 @@ export default function MarketDocumentation() {
           </div>
           <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Kpi label="Clients" value={rows.length} />
-            <Kpi label="Covered hours" value={Math.round(totals.covered / 60)} sub={`${units(totals.covered)} units`} tone="success" />
-            <Kpi label="Overlap (double-doc)" value={Math.round(totals.overlap / 60)} sub="hrs total − covered" tone={totals.overlap ? 'gold' : undefined} />
+            <Kpi label="Documented hrs" value={Math.round(totals.documented / 60)} sub={`of ${Math.round(totals.expected / 60)} expected (24×days)`} tone="success" />
+            <Kpi label="% documented" value={pctTotal == null ? '—' : `${pctTotal}%`} tone={pctTotal >= 95 ? 'success' : 'danger'} />
             <Kpi label="Gap (needed hrs)" value={Math.round(totals.gap / 60)} sub={`${totals.out} out-days excluded · ${totals.inc} incomplete`} tone={totals.gap ? 'danger' : undefined} />
           </section>
 
@@ -239,9 +240,9 @@ export default function MarketDocumentation() {
               <thead className="bg-surface text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-3 py-2">Client</th><th className="px-3 py-2">Home</th><th className="px-3 py-2">Program</th>
-                  <th className="px-3 py-2">Days</th><th className="px-3 py-2">Covered hrs</th><th className="px-3 py-2">Units</th>
-                  <th className="px-3 py-2">Total hrs</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Docs</th>
-                  <th className="px-3 py-2">Gap (needed)</th><th className="px-3 py-2">Days &lt;24h</th><th className="px-3 py-2">Out days</th><th className="px-3 py-2">Incomplete</th>
+                  <th className="px-3 py-2">Days</th><th className="px-3 py-2">Documented</th><th className="px-3 py-2">Expected</th><th className="px-3 py-2">%</th>
+                  <th className="px-3 py-2">Gap</th><th className="px-3 py-2">Overlap</th><th className="px-3 py-2">Docs</th>
+                  <th className="px-3 py-2">Days &lt;24h</th><th className="px-3 py-2">Out days</th><th className="px-3 py-2">Incomplete</th>
                 </tr>
               </thead>
               <tbody>
@@ -251,13 +252,13 @@ export default function MarketDocumentation() {
                     <td className="px-3 py-1.5 font-medium text-beacon">{r.LastName}, {r.FirstName}</td>
                     <td className="px-3 py-1.5 text-ink-muted">{r.location || '—'}{r.locationCount > 1 ? <span className="ml-1 rounded bg-surface px-1 text-xs">+{r.locationCount - 1}</span> : ''}</td>
                     <td className="px-3 py-1.5"><span className={`rounded px-1.5 py-0.5 text-xs ${MODE_TONE[r.mode] || 'bg-surface'}`}>{r.mode || '—'}</span></td>
-                    <td className="px-3 py-1.5">{r.days}</td>
-                    <td className="px-3 py-1.5 font-medium">{hrs(r.coveredMin)}</td>
-                    <td className="px-3 py-1.5 tabular-nums">{units(r.coveredMin)}</td>
-                    <td className="px-3 py-1.5">{hrs(r.totalMin)}</td>
+                    <td className="px-3 py-1.5">{r.coveredDays}</td>
+                    <td className="px-3 py-1.5 font-medium">{hrs(r.documentedMin)}</td>
+                    <td className="px-3 py-1.5 text-ink-muted">{hrs(r.expectedMin)}</td>
+                    <td className={`px-3 py-1.5 font-medium ${r.pctDocumented >= 95 ? 'text-success' : r.pctDocumented < 75 ? 'text-danger' : ''}`}>{r.pctDocumented == null ? '—' : `${r.pctDocumented}%`}</td>
+                    <td className="px-3 py-1.5 text-danger">{hrs(r.gapMin)}</td>
                     <td className={`px-3 py-1.5 ${r.overlapMin ? 'font-medium text-gold-dark' : 'text-ink-muted'}`}>{r.overlapMin ? hrs(r.overlapMin) : '—'}</td>
                     <td className="px-3 py-1.5">{r.documented || '—'}</td>
-                    <td className="px-3 py-1.5 text-danger">{hrs(r.gapMin)}</td>
                     <td className="px-3 py-1.5">{r.daysUnder}</td>
                     <td className={`px-3 py-1.5 ${r.outDays ? 'font-medium text-ink' : 'text-ink-muted'}`}>{r.outDays || '—'}</td>
                     <td className={`px-3 py-1.5 font-medium ${r.incomplete ? 'text-danger' : 'text-ink-muted'}`}>{r.incomplete || '—'}</td>
